@@ -1,0 +1,128 @@
+package com.campushanjang.domain.user.entity;
+
+import com.campushanjang.domain.user.entity.enums.ContactType;
+import com.campushanjang.domain.user.entity.enums.Gender;
+import com.campushanjang.domain.user.entity.enums.UserRole;
+import jakarta.persistence.*;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Entity
+@Table(name = "users")
+@Getter
+@NoArgsConstructor
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(columnDefinition = "uuid", updatable = false, nullable = false)
+    private UUID id;
+
+    @Column(name = "kakao_id", nullable = false, unique = true, length = 50)
+    private String kakaoId;
+
+    // 개발용 로컬 로그인 — 실서비스 전 삭제 예정
+    @Column(name = "email", unique = true, length = 100)
+    private String email;
+
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    @Column(name = "nickname", length = 20)
+    private String nickname;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender")
+    private Gender gender;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
+    @Column(name = "university", length = 100)
+    private String university;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "contact_type")
+    private ContactType contactType;
+
+    @Column(name = "contact_value_encrypted")
+    private String contactValueEncrypted;
+
+    @Column(name = "is_active", nullable = false)
+    private boolean isActive = true;
+
+    @Column(name = "daily_select_count", nullable = false)
+    private int dailySelectCount = 0;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "last_login_at", nullable = false)
+    private LocalDateTime lastLoginAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 10)
+    private UserRole role = UserRole.USER;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<UserTrait> traits = new ArrayList<>();
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<IdealTrait> idealTraits = new ArrayList<>();
+
+    @Builder
+    public User(String kakaoId, String email, String passwordHash,
+                String nickname, Gender gender, LocalDate birthDate,
+                String university, ContactType contactType, String contactValueEncrypted, UserRole role) {
+        this.kakaoId = kakaoId;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.nickname = nickname;
+        this.gender = gender;
+        this.birthDate = birthDate;
+        this.university = university;
+        this.contactType = contactType;
+        this.contactValueEncrypted = contactValueEncrypted;
+        this.role = role != null ? role : UserRole.USER;
+        this.isActive = true;
+        this.createdAt = LocalDateTime.now();
+        this.lastLoginAt = LocalDateTime.now();
+    }
+
+    public void assignAdminRole() {
+        this.role = UserRole.ADMIN;
+    }
+
+    public void updateProfile(String nickname, LocalDate birthDate, String university,
+                              ContactType contactType, String contactValueEncrypted, Gender gender) {
+        this.nickname = nickname;
+        this.birthDate = birthDate;
+        this.university = university;
+        this.contactType = contactType;
+        this.contactValueEncrypted = contactValueEncrypted;
+        this.gender = gender;
+    }
+
+    public void updateLastLoginAt() {
+        this.lastLoginAt = LocalDateTime.now();
+    }
+
+    public void incrementSelectCount() {
+        this.dailySelectCount++;
+    }
+
+    public void resetDailySelectCount() {
+        this.dailySelectCount = 0;
+    }
+
+    public void deactivate() {
+        this.isActive = false;
+    }
+}

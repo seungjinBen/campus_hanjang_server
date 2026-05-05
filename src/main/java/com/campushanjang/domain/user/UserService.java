@@ -1,0 +1,151 @@
+package com.campushanjang.domain.user;
+
+import com.campushanjang.common.exception.BusinessException;
+import com.campushanjang.common.exception.ErrorCode;
+import com.campushanjang.common.security.ResourceOwnerValidator;
+import com.campushanjang.common.util.EncryptionUtil;
+import com.campushanjang.domain.auth.WithdrawalBlocklistRepository;
+import com.campushanjang.domain.auth.entity.WithdrawalBlocklist;
+import com.campushanjang.domain.photo.PhotoRepository;
+import com.campushanjang.domain.user.dto.*;
+import com.campushanjang.domain.user.entity.IdealTrait;
+import com.campushanjang.domain.user.entity.User;
+import com.campushanjang.domain.user.entity.UserTrait;
+import com.campushanjang.domain.user.entity.enums.TraitKey;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.owasp.html.PolicyFactory;
+import org.owasp.html.Sanitizers;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.*;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final UserTraitRepository userTraitRepository;
+    private final IdealTraitRepository idealTraitRepository;
+    private final PhotoRepository photoRepository;
+    private final WithdrawalBlocklistRepository withdrawalBlocklistRepository;
+    private final ResourceOwnerValidator ownerValidator;
+
+    private static final PolicyFactory SANITIZER = Sanitizers.FORMATTING;
+
+    @Transactional
+    public void updateProfile(UUID userId, UserProfileRequestDto request) {
+        ownerValidator.validateOwner(userId);
+        User user = getUser(userId);
+
+        if (userRepository.existsByNicknameAndIdNot(request.getNickname(), userId)) {
+            throw new BusinessException(ErrorCode.NICKNAME_TAKEN);
+        }
+
+        String sanitizedNickname = SANITIZER.sanitize(request.getNickname());
+        String sanitizedUniversity = request.getUniversity() != null
+                ? SANITIZER.sanitize(request.getUniversity()) : null;
+        String encryptedContact = EncryptionUtil.encrypt(request.getContactValue());
+
+        user.updateProfile(
+                sanitizedNickname,
+                request.getBirthDate(),
+                sanitizedUniversity,
+                request.getContactType(),
+                encryptedContact,
+                request.getGender()
+        );
+        log.info("프로필 업데이트 userId={}", userId);
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfileResponseDto getMyProfile(UUID userId) {
+        ownerValidator.validateOwner(userId);
+        User user = getUser(userId);
+        String contactValue = user.getContactValueEncrypted() != null
+                ? EncryptionUtil.decrypt(user.getContactValueEncrypted()) : null;
+        return UserProfileResponseDto.of(user, contactValue);
+    }
+
+    @Transactional
+    public void updateTraits(UUID userId, List<TraitRequestDto> traitRequests) {
+        ownerValidator.validateOwner(userId);
+        User user = getUser(userId);
+
+        for (TraitRequestDto dto : traitRequests) {
+            userTraitRepository.findByUserIdAndTraitKey(userId, dto.getTraitKey())
+                    .ifPresentOrElse(
+                            trait -> trait.update(dto.getTraitValue(), dto.isVisible()),
+                            () -> userTraitRepository.save(UserTrait.builder()
+                                    .user(user)
+                                    .traitKey(dto.getTraitKey())
+                                    .traitValue(dto.getTraitValue())
+                                    .isVisible(dto.isVisible())
+                                    .build())
+                    );
+        }
+    }
+
+    @Transactional
+    public void updateIdealTraits(UUID userId, List<IdealRequestDto> idealRequests) {
+        ownerValidator.validateOwner(userId);
+        User user = getUser(userId);
+
+        for (IdealRequestDto dto : idealRequests) {
+            if (dto.getTraitValue() == null) {
+                idealTraitRepository.deleteByUserIdAndTraitKey(userId, dto.getTraitKey());
+            } else {
+                idealTraitRepository.findByUserIdAndTraitKey(userId, dto.getTraitKey())
+                        .ifPresentOrElse(
+                                ideal -> ideal.update(dto.getTraitValue()),
+                                () -> idealTraitRepository.save(IdealTrait.builder()
+                                        .user(user)
+                                        .traitKey(dto.getTraitKey())
+                                        .traitValue(dto.getTraitValue())
+                                        .build())
+                        );
+            }
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileCompleteResponseDto checkProfileComplete(UUID userId) {
+        ownerValidator.validateOwner(userId);
+        User user = getUser(userId);
+        List<String> missing = new ArrayList<>();
+
+        if (user.getNickname() == null) missing.add("nickname");
+        if (user.getGender() == null) missing.add("gender");
+        if (user.getBirthDate() == null) missing.add("birthDate");
+        if (user.getContactValueEncrypted() == null) missing.add("contactValue");
+
+        boolean hasPhoto = photoRepository.findByUserId(userId).isPresent();
+        if (!hasPhoto) missing.add("photo");
+
+        long traitCount = userTraitRepository.countByUserId(userId);
+        if (traitCount == 0) missing.add("traits");
+
+        return new ProfileCompleteResponseDto(missing.isEmpty(), missing);
+    }
+
+    @Transactional
+    public void deleteAccount(UUID userId) {
+        ownerValidator.validateOwner(userId);
+        User user = getUser(userId);
+        withdrawalBlocklistRepository.save(WithdrawalBlocklist.builder()
+                .kakaoId(user.getKakaoId())
+                .build());
+        // Firebase Storage 파일은 ON DELETE CASCADE 이후 별도 정리 — 스케줄러 또는 수동 cleanup 예정
+        userRepository.delete(user);
+        log.info("계정 삭제 userId={}", userId);
+    }
+
+    private User getUser(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+    }
+
+    public record ProfileCompleteResponseDto(boolean complete, List<String> missing) {}
+}

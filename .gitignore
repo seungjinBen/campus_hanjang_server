@@ -1,0 +1,15 @@
+.gradle/
+build/
+.env
+firebase-key.json
+logs/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+.idea/
+*.iml
+out/
+.DS_Store
+HELP.md
+k6/results/
+*.json
