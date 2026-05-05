@@ -54,7 +54,7 @@ jwt:
 kakao:
   client-id: 8579221dc3dd585ce61aafcdcf77cb16
   client-secret: ${KAKAO_CLIENT_SECRET}
-  redirect-uri: http://localhost:3000/auth/kakao/callback
+  redirect-uri: https://campushanjang.kr/auth/kakao/callback
 
 firebase:
   project-id: campushanjang
