@@ -69,4 +69,4 @@ admin:
   kakao-id: ${ADMIN_KAKAO_ID:}
 
 cors:
-  allowed-origins: http://localhost:3000
+  allowed-origins: https://www.campushanjang.kr
