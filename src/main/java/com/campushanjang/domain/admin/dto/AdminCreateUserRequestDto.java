@@ -3,6 +3,7 @@ package com.campushanjang.domain.admin.dto;
 import com.campushanjang.domain.user.entity.enums.ContactType;
 import com.campushanjang.domain.user.entity.enums.Gender;
 import com.campushanjang.domain.user.entity.enums.TraitKey;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -23,7 +24,7 @@ public record AdminCreateUserRequestDto(
     public record TraitEntry(
             @NotNull TraitKey traitKey,
             String traitValue,
-            boolean isVisible
+            @JsonProperty("isVisible") boolean isVisible
     ) {}
 
     public record IdealEntry(

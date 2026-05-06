@@ -17,7 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import net.coobird.thumbnailator.Thumbnails;
+
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -38,7 +41,7 @@ public class PhotoService {
     @Value("${firebase.storage-bucket}")
     private String storageBucket;
 
-    private static final long MAX_SIZE = 5L * 1024 * 1024;
+    private static final long MAX_SIZE = 10L * 1024 * 1024;
     private static final Map<String, byte[]> MAGIC_BYTES = Map.of(
             "image/jpeg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF},
             "image/png",  new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47},
@@ -54,6 +57,7 @@ public class PhotoService {
         // getBytes()로 한 번만 읽어 스트림 이중 소비 방지
         byte[] bytes = file.getBytes();
         validateFileContent(file.getContentType(), bytes);
+        bytes = resizeImage(bytes);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
@@ -102,6 +106,18 @@ public class PhotoService {
         UserPhoto photo = photoRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROFILE_INCOMPLETE));
         photo.updateThumbnailUrl(thumbnailUrl);
+    }
+
+    // 최대 1200x1600(세로형 3:4) 내로 리사이즈, JPEG 85% 압축 — 원본이 이미 작으면 그대로 유지
+    private byte[] resizeImage(byte[] original) throws IOException {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Thumbnails.of(new ByteArrayInputStream(original))
+                    .size(1200, 1600)
+                    .outputFormat("jpeg")
+                    .outputQuality(0.85)
+                    .toOutputStream(out);
+            return out.toByteArray();
+        }
     }
 
     private void validateFileContent(String contentType, byte[] bytes) {
