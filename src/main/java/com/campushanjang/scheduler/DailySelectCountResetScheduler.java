@@ -14,7 +14,7 @@ public class DailySelectCountResetScheduler {
 
     private final UserRepository userRepository;
 
-    @Scheduled(cron = "0 0 0 * * *")
+    @Scheduled(cron = "10 0 0 * * *")
     @Transactional
     public void resetDailySelectCounts() {
         try {
