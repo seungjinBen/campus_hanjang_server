@@ -17,12 +17,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -39,13 +41,19 @@ public class PhotoService {
     private static final long MAX_SIZE = 5L * 1024 * 1024;
     private static final Map<String, byte[]> MAGIC_BYTES = Map.of(
             "image/jpeg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF},
-            "image/png", new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47},
+            "image/png",  new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47},
             "image/webp", new byte[]{0x52, 0x49, 0x46, 0x46}
+    );
+    // iOS Safari는 HEIC를 JPEG로 변환하지만 Content-Type을 다르게 보낼 수 있어 추가 허용 목록
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
+            "image/jpeg", "image/jpg", "image/png", "image/webp"
     );
 
     @Transactional
     public PhotoUploadResponseDto upload(UUID userId, MultipartFile file) throws IOException {
-        validateFile(file);
+        // getBytes()로 한 번만 읽어 스트림 이중 소비 방지
+        byte[] bytes = file.getBytes();
+        validateFileContent(file.getContentType(), bytes);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
@@ -57,8 +65,8 @@ public class PhotoService {
         Optional<UserPhoto> existing = photoRepository.findByUserId(userId);
         existing.ifPresent(photo -> deleteFromFirebase(photo.getStorageUrl()));
 
-        // Firebase에 업로드
-        String downloadUrl = uploadToFirebase(file.getInputStream(), storagePath, file.getSize());
+        // Firebase에 업로드 (ByteArrayInputStream으로 처음부터 전송)
+        String downloadUrl = uploadToFirebase(new ByteArrayInputStream(bytes), storagePath, bytes.length);
 
         // DB 저장 (유저당 1건 UNIQUE 보장)
         UserPhoto photo = existing
@@ -96,27 +104,37 @@ public class PhotoService {
         photo.updateThumbnailUrl(thumbnailUrl);
     }
 
-    private void validateFile(MultipartFile file) throws IOException {
-        if (file.getSize() > MAX_SIZE) {
+    private void validateFileContent(String contentType, byte[] bytes) {
+        if (bytes.length > MAX_SIZE) {
             throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
         }
 
-        String contentType = file.getContentType();
-        if (contentType == null || !MAGIC_BYTES.containsKey(contentType)) {
+        // image/jpg처럼 비표준 MIME도 허용, 정규화
+        String normalizedType = normalizeContentType(contentType);
+        if (normalizedType == null) {
             throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
         }
 
-        // magic bytes 검증 — Content-Type 조작 방지
-        byte[] header = file.getInputStream().readNBytes(4);
-        byte[] expected = MAGIC_BYTES.get(contentType);
+        // magic bytes로 실제 포맷 검증 — Content-Type 조작/불일치 방지
+        byte[] expected = MAGIC_BYTES.get(normalizedType);
+        if (expected == null || bytes.length < expected.length) {
+            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+        }
         for (int i = 0; i < expected.length; i++) {
-            if (header[i] != expected[i]) {
+            if (bytes[i] != expected[i]) {
                 throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
             }
         }
     }
 
-    private String uploadToFirebase(InputStream stream, String path, long size) throws IOException {
+    private String normalizeContentType(String contentType) {
+        if (contentType == null) return null;
+        String lower = contentType.toLowerCase().split(";")[0].trim();
+        if (lower.equals("image/jpg")) return "image/jpeg"; // iOS 일부 브라우저
+        return ALLOWED_CONTENT_TYPES.contains(lower) ? lower : null;
+    }
+
+    private String uploadToFirebase(InputStream stream, String path, int size) throws IOException {
         Storage storage = StorageClient.getInstance().bucket(storageBucket).getStorage();
         BlobId blobId = BlobId.of(storageBucket, path);
 
