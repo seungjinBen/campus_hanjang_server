@@ -31,7 +31,7 @@ public enum ErrorCode {
 
     // 사진
     PHOTO_TOO_LARGE("PHOTO_TOO_LARGE", "사진은 5MB 이하만 업로드할 수 있어요", HttpStatus.BAD_REQUEST),
-    PHOTO_INVALID_FORMAT("PHOTO_INVALID_FORMAT", "JPEG, PNG, WEBP 형식만 가능해요", HttpStatus.BAD_REQUEST),
+    PHOTO_INVALID_FORMAT("PHOTO_INVALID_FORMAT", "JPEG, PNG, WEBP, HEIC 형식만 가능해요", HttpStatus.BAD_REQUEST),
 
     // 서버
     RATE_LIMIT_EXCEEDED("RATE_LIMIT_EXCEEDED", "잠시 후 다시 시도해 주세요", HttpStatus.TOO_MANY_REQUESTS),

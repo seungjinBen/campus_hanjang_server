@@ -23,12 +23,14 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -42,21 +44,25 @@ public class PhotoService {
     private String storageBucket;
 
     private static final long MAX_SIZE = 10L * 1024 * 1024;
-    private static final Map<String, byte[]> MAGIC_BYTES = Map.of(
-            "image/jpeg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF},
-            "image/png",  new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47},
-            "image/webp", new byte[]{0x52, 0x49, 0x46, 0x46}
-    );
-    // iOS Safari는 HEIC를 JPEG로 변환하지만 Content-Type을 다르게 보낼 수 있어 추가 허용 목록
-    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-            "image/jpeg", "image/jpg", "image/png", "image/webp"
+    private static final String FORMAT_JPEG = "image/jpeg";
+    private static final String FORMAT_PNG  = "image/png";
+    private static final String FORMAT_WEBP = "image/webp";
+    private static final String FORMAT_HEIC = "image/heic";
+    // HEIC ftyp 브랜드 목록 — MP4/MOV 등 영상 포맷과 구별하기 위해 명시
+    private static final Set<String> HEIC_BRANDS = Set.of(
+            "heic", "heis", "hevc", "hevx", "mif1", "msf1", "avif"
     );
 
     @Transactional
     public PhotoUploadResponseDto upload(UUID userId, MultipartFile file) throws IOException {
         // getBytes()로 한 번만 읽어 스트림 이중 소비 방지
         byte[] bytes = file.getBytes();
-        validateFileContent(file.getContentType(), bytes);
+        String detectedFormat = validateFileContent(bytes);
+
+        // HEIC/HEIF는 Java ImageIO 미지원 — ImageMagick으로 메모리 내 JPEG 변환 후 처리
+        if (FORMAT_HEIC.equals(detectedFormat)) {
+            bytes = convertHeicToJpeg(bytes);
+        }
         bytes = resizeImage(bytes);
 
         User user = userRepository.findById(userId)
@@ -124,34 +130,79 @@ public class PhotoService {
         }
     }
 
-    private void validateFileContent(String contentType, byte[] bytes) {
+    // Content-Type 대신 magic bytes로 실제 포맷 확인 — iOS는 Content-Type이 부정확한 경우가 많음
+    private String validateFileContent(byte[] bytes) {
         if (bytes.length > MAX_SIZE) {
             throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
         }
-
-        // image/jpg처럼 비표준 MIME도 허용, 정규화
-        String normalizedType = normalizeContentType(contentType);
-        if (normalizedType == null) {
+        String format = detectFormatFromBytes(bytes);
+        if (format == null) {
             throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
         }
-
-        // magic bytes로 실제 포맷 검증 — Content-Type 조작/불일치 방지
-        byte[] expected = MAGIC_BYTES.get(normalizedType);
-        if (expected == null || bytes.length < expected.length) {
-            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
-        }
-        for (int i = 0; i < expected.length; i++) {
-            if (bytes[i] != expected[i]) {
-                throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
-            }
-        }
+        return format;
     }
 
-    private String normalizeContentType(String contentType) {
-        if (contentType == null) return null;
-        String lower = contentType.toLowerCase().split(";")[0].trim();
-        if (lower.equals("image/jpg")) return "image/jpeg"; // iOS 일부 브라우저
-        return ALLOWED_CONTENT_TYPES.contains(lower) ? lower : null;
+    private String detectFormatFromBytes(byte[] bytes) {
+        if (bytes.length < 4) return null;
+
+        // JPEG: FF D8 FF
+        if ((bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF) {
+            return FORMAT_JPEG;
+        }
+        // PNG: 89 50 4E 47
+        if ((bytes[0] & 0xFF) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) {
+            return FORMAT_PNG;
+        }
+        // WEBP: 52 49 46 46 .. .. .. .. 57 45 42 50 (RIFF....WEBP) — 뒤의 WEBP 시그니처까지 확인
+        if (bytes.length >= 12
+                && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46
+                && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) {
+            return FORMAT_WEBP;
+        }
+        // HEIC/HEIF: ISO BMFF 컨테이너 — offset 4..7 == "ftyp", brand으로 MP4/MOV와 구별
+        if (bytes.length >= 12
+                && bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
+            String brand = new String(bytes, 8, 4, StandardCharsets.US_ASCII).trim();
+            return HEIC_BRANDS.contains(brand) ? FORMAT_HEIC : null;
+        }
+        return null;
+    }
+
+    // ImageMagick으로 메모리 내 HEIC→JPEG 변환 (디스크 저장 없음)
+    private byte[] convertHeicToJpeg(byte[] heicBytes) {
+        try {
+            Process process = new ProcessBuilder("convert", "heic:-", "jpeg:-").start();
+            try {
+                ByteArrayOutputStream stdoutBuf = new ByteArrayOutputStream();
+                Thread readerThread = new Thread(() -> {
+                    try { process.getInputStream().transferTo(stdoutBuf); }
+                    catch (IOException ignored) {}
+                });
+                readerThread.start();
+
+                try (OutputStream stdin = process.getOutputStream()) {
+                    stdin.write(heicBytes);
+                }
+                readerThread.join(30_000);
+
+                boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+                if (!finished || process.exitValue() != 0 || stdoutBuf.size() == 0) {
+                    log.warn("HEIC 변환 실패 — ImageMagick 종료코드={}", finished ? process.exitValue() : "타임아웃");
+                    throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+                }
+                return stdoutBuf.toByteArray();
+            } finally {
+                process.destroyForcibly();
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+        } catch (Exception e) {
+            log.warn("HEIC 변환 실패 — ImageMagick 미설치이거나 처리 불가 error={}", e.getMessage());
+            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+        }
     }
 
     private String uploadToFirebase(InputStream stream, String path, int size) throws IOException {
