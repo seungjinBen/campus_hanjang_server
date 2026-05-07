@@ -174,20 +174,31 @@ public class PhotoService {
             Process process = new ProcessBuilder("convert", "heic:-", "jpeg:-").start();
             try {
                 ByteArrayOutputStream stdoutBuf = new ByteArrayOutputStream();
-                Thread readerThread = new Thread(() -> {
+                ByteArrayOutputStream stderrBuf = new ByteArrayOutputStream();
+
+                // stdout, stderr를 동시에 읽어야 파이프 버퍼 포화로 인한 데드락을 방지할 수 있음
+                Thread stdoutThread = new Thread(() -> {
                     try { process.getInputStream().transferTo(stdoutBuf); }
                     catch (IOException ignored) {}
                 });
-                readerThread.start();
+                Thread stderrThread = new Thread(() -> {
+                    try { process.getErrorStream().transferTo(stderrBuf); }
+                    catch (IOException ignored) {}
+                });
+                stdoutThread.start();
+                stderrThread.start();
 
                 try (OutputStream stdin = process.getOutputStream()) {
                     stdin.write(heicBytes);
                 }
-                readerThread.join(30_000);
+
+                stdoutThread.join(20_000);
+                stderrThread.join(3_000);
 
                 boolean finished = process.waitFor(5, TimeUnit.SECONDS);
                 if (!finished || process.exitValue() != 0 || stdoutBuf.size() == 0) {
-                    log.warn("HEIC 변환 실패 — ImageMagick 종료코드={}", finished ? process.exitValue() : "타임아웃");
+                    String stderr = stderrBuf.toString(StandardCharsets.UTF_8);
+                    log.warn("HEIC 변환 실패 — 종료코드={} stderr={}", finished ? process.exitValue() : "타임아웃", stderr);
                     throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
                 }
                 return stdoutBuf.toByteArray();
