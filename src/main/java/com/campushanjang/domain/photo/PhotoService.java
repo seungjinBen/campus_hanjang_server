@@ -109,7 +109,7 @@ public class PhotoService {
     }
 
     // 최대 1200x1600(세로형 3:4) 내로 리사이즈, JPEG 85% 압축 — 원본이 이미 작으면 그대로 유지
-    private byte[] resizeImage(byte[] original) throws IOException {
+    private byte[] resizeImage(byte[] original) {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Thumbnails.of(new ByteArrayInputStream(original))
                     .size(1200, 1600)
@@ -117,6 +117,10 @@ public class PhotoService {
                     .outputQuality(0.85)
                     .toOutputStream(out);
             return out.toByteArray();
+        } catch (Exception e) {
+            // ImageIO가 처리 불가한 이미지 포맷 (비표준 색공간, 손상된 파일 등) — 500이 아닌 400으로 처리
+            log.warn("이미지 리사이즈 실패 — 처리 불가 포맷 error={}", e.getMessage());
+            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
         }
     }
 
