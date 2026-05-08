@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import net.coobird.thumbnailator.Thumbnails;
 
+import java.util.List;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -169,50 +170,65 @@ public class PhotoService {
     }
 
     // ImageMagick으로 메모리 내 HEIC→JPEG 변환 (디스크 저장 없음)
+    // v7은 `magick`, v6은 `convert` — 두 명령어를 순서대로 시도
     private byte[] convertHeicToJpeg(byte[] heicBytes) {
-        try {
-            Process process = new ProcessBuilder("convert", "heic:-", "jpeg:-").start();
+        List<String[]> candidates = List.of(
+                new String[]{"magick", "heic:-", "jpeg:-"},
+                new String[]{"convert", "heic:-", "jpeg:-"}
+        );
+        for (String[] cmd : candidates) {
             try {
-                ByteArrayOutputStream stdoutBuf = new ByteArrayOutputStream();
-                ByteArrayOutputStream stderrBuf = new ByteArrayOutputStream();
-
-                // stdout, stderr를 동시에 읽어야 파이프 버퍼 포화로 인한 데드락을 방지할 수 있음
-                Thread stdoutThread = new Thread(() -> {
-                    try { process.getInputStream().transferTo(stdoutBuf); }
-                    catch (IOException ignored) {}
-                });
-                Thread stderrThread = new Thread(() -> {
-                    try { process.getErrorStream().transferTo(stderrBuf); }
-                    catch (IOException ignored) {}
-                });
-                stdoutThread.start();
-                stderrThread.start();
-
-                try (OutputStream stdin = process.getOutputStream()) {
-                    stdin.write(heicBytes);
-                }
-
-                stdoutThread.join(20_000);
-                stderrThread.join(3_000);
-
-                boolean finished = process.waitFor(5, TimeUnit.SECONDS);
-                if (!finished || process.exitValue() != 0 || stdoutBuf.size() == 0) {
-                    String stderr = stderrBuf.toString(StandardCharsets.UTF_8);
-                    log.warn("HEIC 변환 실패 — 종료코드={} stderr={}", finished ? process.exitValue() : "타임아웃", stderr);
-                    throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
-                }
-                return stdoutBuf.toByteArray();
-            } finally {
-                process.destroyForcibly();
+                return runImageMagick(cmd, heicBytes);
+            } catch (BusinessException e) {
+                // 프로세스가 실행됐지만 변환 실패 — 같은 ImageMagick이므로 다음 명령어로 재시도해도 의미 없음
+                throw e;
+            } catch (IOException e) {
+                // 명령어가 존재하지 않음 — 다음 후보 시도
+                log.debug("HEIC 변환 명령어 없음 cmd={}", cmd[0]);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
             }
-        } catch (BusinessException e) {
-            throw e;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
-        } catch (Exception e) {
-            log.warn("HEIC 변환 실패 — ImageMagick 미설치이거나 처리 불가 error={}", e.getMessage());
-            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+        }
+        log.warn("HEIC 변환 실패 — ImageMagick 미설치 (magick/convert 모두 없음)");
+        throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+    }
+
+    private byte[] runImageMagick(String[] cmd, byte[] inputBytes) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder(cmd).start();
+        try {
+            ByteArrayOutputStream stdoutBuf = new ByteArrayOutputStream();
+            ByteArrayOutputStream stderrBuf = new ByteArrayOutputStream();
+
+            // stdout, stderr를 동시에 읽어야 파이프 버퍼 포화로 인한 데드락을 방지할 수 있음
+            Thread stdoutThread = new Thread(() -> {
+                try { process.getInputStream().transferTo(stdoutBuf); }
+                catch (IOException ignored) {}
+            });
+            Thread stderrThread = new Thread(() -> {
+                try { process.getErrorStream().transferTo(stderrBuf); }
+                catch (IOException ignored) {}
+            });
+            stdoutThread.start();
+            stderrThread.start();
+
+            try (OutputStream stdin = process.getOutputStream()) {
+                stdin.write(inputBytes);
+            }
+
+            stdoutThread.join(20_000);
+            stderrThread.join(3_000);
+
+            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+            if (!finished || process.exitValue() != 0 || stdoutBuf.size() == 0) {
+                String stderr = stderrBuf.toString(StandardCharsets.UTF_8);
+                log.warn("HEIC 변환 실패 cmd={} 종료코드={} stderr={}",
+                        cmd[0], finished ? process.exitValue() : "타임아웃", stderr);
+                throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+            }
+            return stdoutBuf.toByteArray();
+        } finally {
+            process.destroyForcibly();
         }
     }
 
