@@ -60,10 +60,20 @@ public class PhotoService {
     private static final Set<String> MOV_BRANDS = Set.of("qt  ");
 
     @Transactional
-    public PhotoUploadResponseDto upload(UUID userId, MultipartFile file) throws IOException {
+    public PhotoUploadResponseDto upload(UUID userId, MultipartFile file) {
+        log.info("사진 업로드 시작 userId={} size={} contentType={}", userId, file.getSize(), file.getContentType());
+
         // getBytes()로 한 번만 읽어 스트림 이중 소비 방지
-        byte[] bytes = file.getBytes();
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException e) {
+            log.error("파일 읽기 실패 userId={}", userId, e);
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
+
         String detectedFormat = validateFileContent(bytes);
+        log.info("파일 포맷 감지 userId={} detectedFormat={} size={}", userId, detectedFormat, bytes.length);
 
         // HEIC/HEIF는 Java ImageIO 미지원 — ImageMagick으로 메모리 내 JPEG 변환 후 처리
         if (FORMAT_HEIC.equals(detectedFormat)) {
@@ -86,7 +96,14 @@ public class PhotoService {
         existing.ifPresent(photo -> deleteFromFirebase(photo.getStorageUrl()));
 
         // Firebase에 업로드 (ByteArrayInputStream으로 처음부터 전송)
-        String downloadUrl = uploadToFirebase(new ByteArrayInputStream(bytes), storagePath, bytes.length);
+        // StorageException(RuntimeException)도 함께 포착해 서비스 컨텍스트를 로그에 남김
+        String downloadUrl;
+        try {
+            downloadUrl = uploadToFirebase(new ByteArrayInputStream(bytes), storagePath, bytes.length);
+        } catch (IOException | RuntimeException e) {
+            log.error("Firebase 업로드 실패 userId={} storagePath={}", userId, storagePath, e);
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
 
         // DB 저장 (유저당 1건 UNIQUE 보장)
         UserPhoto photo = existing
@@ -135,7 +152,7 @@ public class PhotoService {
             return out.toByteArray();
         } catch (Exception e) {
             // ImageIO가 처리 불가한 이미지 포맷 (비표준 색공간, 손상된 파일 등) — 500이 아닌 400으로 처리
-            log.warn("이미지 리사이즈 실패 — 처리 불가 포맷 error={}", e.getMessage());
+            log.warn("이미지 리사이즈 실패 — 처리 불가 포맷", e);
             throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
         }
     }
@@ -197,7 +214,7 @@ public class PhotoService {
                 throw e;
             } catch (IOException e) {
                 // 명령어가 존재하지 않음 — 다음 후보 시도
-                log.debug("HEIC 변환 명령어 없음 cmd={}", cmd[0]);
+                log.debug("HEIC 변환 명령어 없음 cmd={} error={}", cmd[0], e.getMessage());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
@@ -221,7 +238,7 @@ public class PhotoService {
             } catch (BusinessException e) {
                 throw e;
             } catch (IOException e) {
-                log.debug("Live Photo 변환 명령어 없음 cmd={}", cmd[0]);
+                log.debug("Live Photo 변환 명령어 없음 cmd={} error={}", cmd[0], e.getMessage());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
@@ -240,11 +257,11 @@ public class PhotoService {
             // stdout, stderr를 동시에 읽어야 파이프 버퍼 포화로 인한 데드락을 방지할 수 있음
             Thread stdoutThread = new Thread(() -> {
                 try { process.getInputStream().transferTo(stdoutBuf); }
-                catch (IOException ignored) {}
+                catch (IOException e) { log.warn("ImageMagick stdout 읽기 실패 cmd={}", cmd[0], e); }
             });
             Thread stderrThread = new Thread(() -> {
                 try { process.getErrorStream().transferTo(stderrBuf); }
-                catch (IOException ignored) {}
+                catch (IOException e) { log.warn("ImageMagick stderr 읽기 실패 cmd={}", cmd[0], e); }
             });
             stdoutThread.start();
             stderrThread.start();
@@ -260,8 +277,8 @@ public class PhotoService {
             boolean finished = process.waitFor(10, TimeUnit.SECONDS);
             if (!finished || process.exitValue() != 0 || stdoutBuf.size() == 0) {
                 String stderr = stderrBuf.toString(StandardCharsets.UTF_8);
-                log.warn("HEIC 변환 실패 cmd={} 종료코드={} stderr={}",
-                        cmd[0], finished ? process.exitValue() : "타임아웃", stderr);
+                log.error("ImageMagick 변환 실패 cmd={} finished={} exitCode={} stdoutSize={} stderr={}",
+                        cmd[0], finished, finished ? process.exitValue() : "N/A", stdoutBuf.size(), stderr);
                 throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
             }
             return stdoutBuf.toByteArray();

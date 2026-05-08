@@ -13,8 +13,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-
 @RestController
 @RequestMapping("/api/photos")
 @RequiredArgsConstructor
@@ -35,7 +33,7 @@ public class PhotoController {
     public ResponseEntity<ApiResponse<PhotoUploadResponseDto>> upload(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam("file") MultipartFile file
-    ) throws IOException {
+    ) {
         PhotoUploadResponseDto result = photoService.upload(principal.getId(), file);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
