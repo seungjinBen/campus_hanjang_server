@@ -79,4 +79,16 @@ public class GlobalExceptionHandler {
                 .build();
         return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.getStatus()).body(ApiResponse.fail(error));
     }
+
+    // OutOfMemoryError 등 Error 계열이 서비스 레이어에서 잡히지 않을 경우 최후 안전망
+    // Exception.class 핸들러는 Error를 처리하지 못해 Spring Boot 기본 500이 반환되던 문제 방지
+    @ExceptionHandler(Throwable.class)
+    public ResponseEntity<ApiResponse<Void>> handleCriticalError(Throwable e) {
+        log.error("치명적 오류 발생 type={} error={}", e.getClass().getSimpleName(), e.getMessage(), e);
+        ErrorResponse error = ErrorResponse.builder()
+                .code(ErrorCode.INTERNAL_ERROR.getCode())
+                .message(ErrorCode.INTERNAL_ERROR.getMessage())
+                .build();
+        return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.getStatus()).body(ApiResponse.fail(error));
+    }
 }

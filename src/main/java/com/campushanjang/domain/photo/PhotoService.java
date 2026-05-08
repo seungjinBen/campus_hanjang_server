@@ -69,7 +69,7 @@ public class PhotoService {
             bytes = file.getBytes();
         } catch (IOException e) {
             log.error("파일 읽기 실패 userId={}", userId, e);
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+            throw new BusinessException(ErrorCode.PHOTO_UPLOAD_FAILED);
         }
 
         String detectedFormat = validateFileContent(bytes);
@@ -102,7 +102,7 @@ public class PhotoService {
             downloadUrl = uploadToFirebase(new ByteArrayInputStream(bytes), storagePath, bytes.length);
         } catch (IOException | RuntimeException e) {
             log.error("Firebase 업로드 실패 userId={} storagePath={}", userId, storagePath, e);
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+            throw new BusinessException(ErrorCode.PHOTO_UPLOAD_FAILED);
         }
 
         // DB 저장 (유저당 1건 UNIQUE 보장)
@@ -150,6 +150,10 @@ public class PhotoService {
                     .outputQuality(0.85)
                     .toOutputStream(out);
             return out.toByteArray();
+        } catch (OutOfMemoryError e) {
+            // 저사양 서버에서 대형 이미지(24MP 이상) 처리 시 JVM 힙 부족 — Error라서 catch(Exception)에 안 걸림
+            log.error("이미지 리사이즈 중 메모리 부족 bytes={}", original.length, e);
+            throw new BusinessException(ErrorCode.PHOTO_UPLOAD_FAILED);
         } catch (Exception e) {
             // ImageIO가 처리 불가한 이미지 포맷 (비표준 색공간, 손상된 파일 등) — 500이 아닌 400으로 처리
             log.warn("이미지 리사이즈 실패 — 처리 불가 포맷", e);
