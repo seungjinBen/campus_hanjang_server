@@ -49,10 +49,13 @@ public class PhotoService {
     private static final String FORMAT_PNG  = "image/png";
     private static final String FORMAT_WEBP = "image/webp";
     private static final String FORMAT_HEIC = "image/heic";
+    private static final String FORMAT_MOV  = "video/quicktime";
     // HEIC ftyp 브랜드 목록 — MP4/MOV 등 영상 포맷과 구별하기 위해 명시
     private static final Set<String> HEIC_BRANDS = Set.of(
             "heic", "heis", "hevc", "hevx", "mif1", "msf1", "avif"
     );
+    // iPhone Live Photo 영상 컴포넌트 브랜드 — 일반 동영상과 구별하기 위해 QuickTime 브랜드만 허용
+    private static final Set<String> MOV_BRANDS = Set.of("qt  ");
 
     @Transactional
     public PhotoUploadResponseDto upload(UUID userId, MultipartFile file) throws IOException {
@@ -63,6 +66,10 @@ public class PhotoService {
         // HEIC/HEIF는 Java ImageIO 미지원 — ImageMagick으로 메모리 내 JPEG 변환 후 처리
         if (FORMAT_HEIC.equals(detectedFormat)) {
             bytes = convertHeicToJpeg(bytes);
+        }
+        // Live Photo MOV는 첫 프레임을 JPEG로 추출
+        if (FORMAT_MOV.equals(detectedFormat)) {
+            bytes = convertMovToJpeg(bytes);
         }
         bytes = resizeImage(bytes);
 
@@ -160,11 +167,14 @@ public class PhotoService {
                 && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) {
             return FORMAT_WEBP;
         }
-        // HEIC/HEIF: ISO BMFF 컨테이너 — offset 4..7 == "ftyp", brand으로 MP4/MOV와 구별
+        // ISO BMFF 컨테이너 (HEIC, Live Photo MOV 공통) — offset 4..7 == "ftyp"
         if (bytes.length >= 12
                 && bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
-            String brand = new String(bytes, 8, 4, StandardCharsets.US_ASCII).trim();
-            return HEIC_BRANDS.contains(brand) ? FORMAT_HEIC : null;
+            String brand = new String(bytes, 8, 4, StandardCharsets.US_ASCII);
+            if (HEIC_BRANDS.contains(brand.trim())) return FORMAT_HEIC;
+            // Live Photo MOV 브랜드는 공백 포함 4자리로 비교 ("qt  ")
+            if (MOV_BRANDS.contains(brand)) return FORMAT_MOV;
+            return null;
         }
         return null;
     }
@@ -191,6 +201,30 @@ public class PhotoService {
             }
         }
         log.warn("HEIC 변환 실패 — ImageMagick 미설치 (magick/convert 모두 없음)");
+        throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+    }
+
+    // Live Photo MOV 영상 컴포넌트에서 첫 프레임을 JPEG로 추출 (디스크 저장 없음)
+    // iPhone MOV는 moov atom이 파일 앞에 위치하므로 stdin 스트리밍으로 처리 가능
+    private byte[] convertMovToJpeg(byte[] movBytes) {
+        List<String[]> candidates = List.of(
+                new String[]{"ffmpeg", "-i", "pipe:0", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"},
+                new String[]{"magick", "mov:-[0]", "jpeg:-"},
+                new String[]{"convert", "mov:-[0]", "jpeg:-"}
+        );
+        for (String[] cmd : candidates) {
+            try {
+                return runImageMagick(cmd, movBytes);
+            } catch (BusinessException e) {
+                throw e;
+            } catch (IOException e) {
+                log.debug("Live Photo 변환 명령어 없음 cmd={}", cmd[0]);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+            }
+        }
+        log.warn("Live Photo MOV 변환 실패 — ffmpeg/ImageMagick 미설치");
         throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
     }
 
