@@ -50,9 +50,11 @@ public class PhotoService {
     private static final String FORMAT_WEBP = "image/webp";
     private static final String FORMAT_HEIC = "image/heic";
     private static final String FORMAT_MOV  = "video/quicktime";
-    // HEIC ftyp 브랜드 목록 — MP4/MOV 등 영상 포맷과 구별하기 위해 명시
+    // HEIC/HEIF ftyp 브랜드 목록 — MP4/MOV 등 영상 포맷과 구별하기 위해 명시
+    // "heif"/"heim" 브랜드: iPhone 고해상도(24MP/48MP) 모드 및 일부 Android 기기에서 사용
     private static final Set<String> HEIC_BRANDS = Set.of(
-            "heic", "heis", "hevc", "hevx", "mif1", "msf1", "avif"
+            "heic", "heis", "hevc", "hevx", "mif1", "msf1", "avif",
+            "heif", "heim"
     );
     // iPhone Live Photo 영상 컴포넌트 브랜드 — 일반 동영상과 구별하기 위해 QuickTime 브랜드만 허용
     private static final Set<String> MOV_BRANDS = Set.of("qt  ");
@@ -179,12 +181,13 @@ public class PhotoService {
         return null;
     }
 
-    // ImageMagick으로 메모리 내 HEIC→JPEG 변환 (디스크 저장 없음)
+    // ImageMagick으로 메모리 내 HEIC/HEIF→JPEG 변환 (디스크 저장 없음)
     // v7은 `magick`, v6은 `convert` — 두 명령어를 순서대로 시도
+    // heif:- 힌트는 HEIC(heic 브랜드)와 HEIF(heif/heim 브랜드) 모두 처리 가능
     private byte[] convertHeicToJpeg(byte[] heicBytes) {
         List<String[]> candidates = List.of(
-                new String[]{"magick", "heic:-", "jpeg:-"},
-                new String[]{"convert", "heic:-", "jpeg:-"}
+                new String[]{"magick", "heif:-", "jpeg:-"},
+                new String[]{"convert", "heif:-", "jpeg:-"}
         );
         for (String[] cmd : candidates) {
             try {
@@ -250,10 +253,11 @@ public class PhotoService {
                 stdin.write(inputBytes);
             }
 
-            stdoutThread.join(20_000);
-            stderrThread.join(3_000);
+            // 24MP HEIF 변환은 저사양 서버에서 20s 이상 소요될 수 있어 45s로 설정
+            stdoutThread.join(45_000);
+            stderrThread.join(5_000);
 
-            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+            boolean finished = process.waitFor(10, TimeUnit.SECONDS);
             if (!finished || process.exitValue() != 0 || stdoutBuf.size() == 0) {
                 String stderr = stderrBuf.toString(StandardCharsets.UTF_8);
                 log.warn("HEIC 변환 실패 cmd={} 종료코드={} stderr={}",
