@@ -12,7 +12,7 @@ public class DatabaseHealthIndicator implements HealthIndicator {
 
     private final EntityManager entityManager;
 
-    // 동시 헬스체크 폭주 방지 — SELECT 1 결과를 5초간 캐싱 (double-checked locking)
+    // 동시 헬스체크 폭주 방지 — SELECT 1 결과를 5초간 캐싱
     private volatile Health cachedHealth = null;
     private volatile long cacheExpiryMs = 0L;
     private static final long CACHE_TTL_MS = 5_000L;
