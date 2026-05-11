@@ -16,7 +16,7 @@ public class FeatureToggleService {
     // 유저 정보 수집 시작일 — 서비스 출시일
     private static final LocalDate USER_COLLECTION_START = LocalDate.of(2026, 5, 4);
     // 매칭 기능 오픈일 — 날짜 변경은 코드 수정 + 재배포가 유일한 방법 (클라이언트 조작 불가)
-    private static final LocalDate MATCHING_FEATURE_START = LocalDate.of(2026, 5, 11);
+    private static final LocalDate MATCHING_FEATURE_START = LocalDate.of(2026, 5, 19);
 
     /**
      * 매칭 기능 활성화 여부 — 오직 서버 시스템 시간(Asia/Seoul) 기준으로 판단한다.
