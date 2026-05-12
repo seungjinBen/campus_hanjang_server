@@ -350,6 +350,7 @@ public class MatchService {
                 .photoUrl(getPhotoUrl(candidate.getId()))
                 .visibleTraits(buildVisibleTraits(candidate.getId()))
                 .matchScore(dc.getMatchScore())
+                .university(candidate.getUniversity())
                 .build();
     }
 

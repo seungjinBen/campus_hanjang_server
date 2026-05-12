@@ -15,6 +15,7 @@ public class MatchCardResponseDto {
     private final String photoUrl;
     private final List<TraitDto> visibleTraits;
     private final double matchScore;
+    private final String university;
 
     @Getter
     @Builder
