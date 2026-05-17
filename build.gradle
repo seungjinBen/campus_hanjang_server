@@ -18,6 +18,7 @@ configurations {
 }
 
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
@@ -46,6 +47,7 @@ dependencies {
 
     // Rate Limiting
     implementation 'com.bucket4j:bucket4j-core:8.10.1'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
 
     // 보안 유틸
     implementation 'org.springframework.security:spring-security-crypto'

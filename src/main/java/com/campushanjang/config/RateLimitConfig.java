@@ -1,5 +1,7 @@
 package com.campushanjang.config;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
@@ -7,8 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Configuration
 public class RateLimitConfig {
@@ -21,27 +22,30 @@ public class RateLimitConfig {
     @Value("${rate-limit.local-login-per-hour:10}")
     private long localLoginPerHour;
 
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .maximumSize(50_000)
+            .build();
 
     public Bucket getIpBucket(String ip) {
-        return buckets.computeIfAbsent("ip:" + ip, k -> buildGlobalBucket());
+        return buckets.get("ip:" + ip, k -> buildGlobalBucket());
     }
 
     public Bucket getKakaoCallbackBucket(String ip) {
-        return buckets.computeIfAbsent("kakao:" + ip, k -> buildKakaoCallbackBucket());
+        return buckets.get("kakao:" + ip, k -> buildKakaoCallbackBucket());
     }
 
     // 개발용 로컬 로그인 — 실서비스 전 삭제 예정
     public Bucket getLocalLoginBucket(String ip) {
-        return buckets.computeIfAbsent("local-login:" + ip, k -> buildLocalLoginBucket());
+        return buckets.get("local-login:" + ip, k -> buildLocalLoginBucket());
     }
 
     public Bucket getUserBucket(String userId, String operation) {
-        return buckets.computeIfAbsent(operation + ":" + userId, k -> buildUserBucket(operation));
+        return buckets.get(operation + ":" + userId, k -> buildUserBucket(operation));
     }
 
     public Bucket getServiceStatusBucket(String ip) {
-        return buckets.computeIfAbsent("service-status:" + ip, k -> buildServiceStatusBucket());
+        return buckets.get("service-status:" + ip, k -> buildServiceStatusBucket());
     }
 
     private Bucket buildGlobalBucket() {
