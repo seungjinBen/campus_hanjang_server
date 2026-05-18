@@ -81,11 +81,6 @@ public class MatchService {
     public SelectResponseDto select(UUID userId, UUID candidateId) {
         User user = getUser(userId);
 
-        // 하루 선택 횟수 3회 초과 방지
-        if (user.getDailySelectCount() >= DAILY_SELECT_LIMIT) {
-            throw new BusinessException(ErrorCode.DAILY_SELECT_LIMIT_EXCEEDED);
-        }
-
         // 오늘의 카드에 포함된 후보인지 확인
         List<DailyCard> todayCards = dailyCardRepository.findByUserIdAndDate(userId, LocalDate.now());
         DailyCard chosenCard = todayCards.stream()
@@ -93,8 +88,20 @@ public class MatchService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.CANDIDATE_NOT_FOUND));
 
-        user.incrementSelectCount();
         User selected = chosenCard.getCandidate();
+
+        // 이미 선택한 상대 재선택 시 횟수 차감 없이 동일한 결과 반환
+        if (selectionRepository.existsBySelectorIdAndSelectedId(userId, candidateId)) {
+            log.info("재선택(횟수 차감 없음) selectorId={} selectedId={}", userId, candidateId);
+            return buildSelectResponse(chosenCard, selected);
+        }
+
+        // 하루 선택 횟수 3회 초과 방지
+        if (user.getDailySelectCount() >= DAILY_SELECT_LIMIT) {
+            throw new BusinessException(ErrorCode.DAILY_SELECT_LIMIT_EXCEEDED);
+        }
+
+        user.incrementSelectCount();
 
         if (chosenCard.getMatchScore() >= CONTACT_REVEAL_THRESHOLD) {
             selectionRepository.save(Selection.builder()
@@ -103,25 +110,31 @@ public class MatchService {
                     .type(SelectionType.CONTACT_REVEALED)
                     .matchScore(chosenCard.getMatchScore())
                     .build());
+            log.info("연락처 공개 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
+        } else {
+            log.info("쪽지 유도 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
+        }
 
+        return buildSelectResponse(chosenCard, selected);
+    }
+
+    private SelectResponseDto buildSelectResponse(DailyCard chosenCard, User selected) {
+        if (chosenCard.getMatchScore() >= CONTACT_REVEAL_THRESHOLD) {
             // 연락처 복호화 — 70% 이상 일치 시에만 허용
             String contactValue = selected.getContactValueEncrypted() != null
                     ? EncryptionUtil.decrypt(selected.getContactValueEncrypted()) : null;
-
-            log.info("연락처 공개 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
             return SelectResponseDto.builder()
                     .type("CONTACT_REVEALED")
                     .message("당신이 상대방의 이상형이에요! 💘 연락처를 확인해보세요.")
-                    .selectedId(candidateId)
+                    .selectedId(selected.getId())
                     .contactType(selected.getContactType() != null ? selected.getContactType().name() : null)
                     .contactValue(contactValue)
                     .build();
         } else {
-            log.info("쪽지 유도 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
             return SelectResponseDto.builder()
                     .type("NOTE_REQUIRED")
                     .message("아직 상대방의 이상형 조건에 완전히 맞지 않아요. 쪽지로 먼저 마음을 전해보세요! 💌")
-                    .selectedId(candidateId)
+                    .selectedId(selected.getId())
                     .build();
         }
     }

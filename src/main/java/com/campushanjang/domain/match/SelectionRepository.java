@@ -16,4 +16,6 @@ public interface SelectionRepository extends JpaRepository<Selection, UUID> {
             @Param("selectedId") UUID selectedId,
             @Param("type") SelectionType type
     );
+
+    boolean existsBySelectorIdAndSelectedId(UUID selectorId, UUID selectedId);
 }
