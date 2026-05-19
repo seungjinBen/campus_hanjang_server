@@ -48,8 +48,10 @@ public class MatchService {
     private static final int DAILY_CARD_LIMIT = 10;
     // 하루 최대 선택 횟수 3회 — 선택 희소성 규칙
     private static final int DAILY_SELECT_LIMIT = 3;
-    // 일치율 70% 기준 — 연락처 즉시 공개 vs 쪽지 분기 임계값
-    private static final double CONTACT_REVEAL_THRESHOLD = 0.7;
+    // 일치율 75% 기준 — 연락처 즉시 공개 vs 쪽지 분기 임계값
+    private static final double CONTACT_REVEAL_THRESHOLD = 0.75;
+    // 서비스 공식 오픈일 — 이전에 스케줄러가 생성한 카드가 30일 제외 풀에 포함되지 않도록 하한선으로 사용
+    private static final LocalDate SERVICE_LAUNCH_DATE = LocalDate.of(2026, 5, 19);
     @Transactional
     public DailyCardsResponseDto getTodayCards(UUID userId) {
         User user = getUser(userId);
@@ -313,9 +315,13 @@ public class MatchService {
 
         Gender oppositeGender = user.getGender() == Gender.MALE ? Gender.FEMALE : Gender.MALE;
 
-        // 최근 30일 내 노출된 후보 제외 (오늘 기존 카드 포함 — cardDate > since 조건에 포함됨)
+        // 서비스 오픈 이전 카드가 제외 풀에 포함되지 않도록 하한선 적용
+        LocalDate thirtyDaysAgo = date.minusDays(30);
+        LocalDate effectiveSince = thirtyDaysAgo.isBefore(SERVICE_LAUNCH_DATE)
+                ? SERVICE_LAUNCH_DATE.minusDays(1)
+                : thirtyDaysAgo;
         List<UUID> recentIds = dailyCardRepository.findRecentCandidateIds(
-                user.getId(), date.minusDays(30));
+                user.getId(), effectiveSince);
 
         List<User> pool = recentIds.isEmpty()
                 ? userRepository.findActiveByGender(oppositeGender)
