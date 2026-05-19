@@ -57,15 +57,8 @@ public class MatchService {
         User user = getUser(userId);
         LocalDate today = LocalDate.now();
 
+        // 자정 스케줄러가 생성한 카드만 반환 — 온디맨드 생성 시 당일 가입자가 즉시 노출되는 문제 방지
         List<DailyCard> cards = dailyCardRepository.findByUserIdAndDate(userId, today);
-
-        // 카드가 없거나 한도 미달이면 보충 생성 — 스케줄러 이후 가입한 신규 유저 포함
-        if (cards.size() < DAILY_CARD_LIMIT) {
-            List<DailyCard> added = generateCardsInternal(user, today);
-            if (!added.isEmpty()) {
-                cards = dailyCardRepository.findByUserIdAndDate(userId, today);
-            }
-        }
 
         int remaining = Math.max(0, DAILY_SELECT_LIMIT - user.getDailySelectCount());
 
