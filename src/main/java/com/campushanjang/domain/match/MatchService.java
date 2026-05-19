@@ -361,9 +361,13 @@ public class MatchService {
 
     private MatchCardResponseDto buildCardDto(DailyCard dc) {
         User candidate = dc.getCandidate();
+        String birthYear = candidate.getBirthDate() != null
+                ? String.format("%02d년생", candidate.getBirthDate().getYear() % 100)
+                : null;
         return MatchCardResponseDto.builder()
                 .candidateId(candidate.getId())
                 .nickname(candidate.getNickname())
+                .birthYear(birthYear)
                 .photoUrl(getPhotoUrl(candidate.getId()))
                 .visibleTraits(buildVisibleTraits(candidate.getId()))
                 .matchScore(dc.getMatchScore())

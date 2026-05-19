@@ -12,6 +12,7 @@ public class MatchCardResponseDto {
 
     private final UUID candidateId;
     private final String nickname;
+    private final String birthYear;
     private final String photoUrl;
     private final List<TraitDto> visibleTraits;
     private final double matchScore;
