@@ -57,8 +57,13 @@ public class MatchService {
         User user = getUser(userId);
         LocalDate today = LocalDate.now();
 
-        // 자정 스케줄러가 생성한 카드만 반환 — 온디맨드 생성 시 당일 가입자가 즉시 노출되는 문제 방지
         List<DailyCard> cards = dailyCardRepository.findByUserIdAndDate(userId, today);
+
+        // 카드가 아예 없는 경우(자정 이후 신규 가입자)에만 온디맨드 생성
+        // 탈퇴로 줄어든 카드(예: 9장)는 보충하지 않음 — cards.size() > 0 이면 그대로 유지
+        if (cards.isEmpty()) {
+            cards = generateCardsInternal(user, today);
+        }
 
         int remaining = Math.max(0, DAILY_SELECT_LIMIT - user.getDailySelectCount());
 
