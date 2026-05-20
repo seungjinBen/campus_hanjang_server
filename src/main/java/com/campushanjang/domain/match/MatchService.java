@@ -79,7 +79,9 @@ public class MatchService {
 
     @Transactional
     public SelectResponseDto select(UUID userId, UUID candidateId) {
-        User user = getUser(userId);
+        // 비관적 락 — 동시 요청이 dailySelectCount를 동시에 읽어 초과 선택하는 경쟁 조건 방지
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
 
         // 오늘의 카드에 포함된 후보인지 확인
         List<DailyCard> todayCards = dailyCardRepository.findByUserIdAndDate(userId, LocalDate.now());
@@ -112,6 +114,14 @@ public class MatchService {
                     .build());
             log.info("연락처 공개 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
         } else {
+            // NOTE_REQUIRED: Selection을 즉시 저장해야 더블탭·네트워크 재시도 시 멱등성 가드가 동작한다.
+            // 저장하지 않으면 existsBySelectorIdAndSelectedId가 항상 false를 반환해 횟수가 중복 차감된다.
+            selectionRepository.save(Selection.builder()
+                    .selector(user)
+                    .selected(selected)
+                    .type(SelectionType.NOTE_SENT)
+                    .matchScore(chosenCard.getMatchScore())
+                    .build());
             log.info("쪽지 유도 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
         }
 
@@ -145,6 +155,16 @@ public class MatchService {
         User selected = userRepository.findById(selectedId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CANDIDATE_NOT_FOUND));
 
+        // select()를 먼저 호출한 경우에만 쪽지 전송 허용 — NOTE_SENT Selection이 select()에서 생성됨
+        if (!selectionRepository.existsBySelectorIdAndSelectedIdAndType(userId, selectedId, SelectionType.NOTE_SENT)) {
+            throw new BusinessException(ErrorCode.CANDIDATE_NOT_FOUND);
+        }
+
+        // 동일 상대에게 쪽지 중복 전송 방지
+        if (noteRepository.existsBySelectorIdAndSelectedId(userId, selectedId)) {
+            throw new BusinessException(ErrorCode.NOTE_ALREADY_SENT);
+        }
+
         String content = SANITIZER.sanitize(rawContent);
 
         // 공백만 있는 쪽지 거부
@@ -163,12 +183,7 @@ public class MatchService {
                 .noteContent(content)
                 .build());
 
-        selectionRepository.save(Selection.builder()
-                .selector(selector)
-                .selected(selected)
-                .type(SelectionType.NOTE_SENT)
-                .build());
-
+        // Selection은 select()에서 이미 저장됨 — 여기서 추가 저장하면 중복 레코드 발생
         log.info("쪽지 전송 selectorId={} selectedId={}", userId, selectedId);
     }
 

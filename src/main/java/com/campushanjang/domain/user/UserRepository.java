@@ -2,7 +2,9 @@ package com.campushanjang.domain.user;
 
 import com.campushanjang.domain.user.entity.User;
 import com.campushanjang.domain.user.entity.enums.Gender;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,6 +27,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     // JWT 유효성 2차 검증 — 탈퇴·비활성화 계정으로 발급된 토큰 차단
     boolean existsByIdAndIsActiveTrue(UUID id);
+
+    // select() 전용 — 선택 횟수 차감 중 동시 요청으로 인한 초과 방지
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id = :id")
+    Optional<User> findByIdForUpdate(@Param("id") UUID id);
 
     // 프로필 완성 유저만 후보로 허용 — 사진·특징 없는 미완성 계정이 카드에 노출되지 않도록
     @Query("""

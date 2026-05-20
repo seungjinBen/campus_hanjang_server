@@ -28,6 +28,7 @@ public enum ErrorCode {
     NOTE_TOO_LONG("NOTE_TOO_LONG", "쪽지는 50자 이내로 작성해 주세요", HttpStatus.BAD_REQUEST),
     NOTE_NOT_FOUND("NOTE_NOT_FOUND", "쪽지를 찾을 수 없어요", HttpStatus.NOT_FOUND),
     NOTE_ALREADY_RESPONDED("NOTE_ALREADY_RESPONDED", "이미 응답한 쪽지예요", HttpStatus.CONFLICT),
+    NOTE_ALREADY_SENT("NOTE_ALREADY_SENT", "이미 쪽지를 보낸 상대예요", HttpStatus.CONFLICT),
 
     // 사진
     PHOTO_TOO_LARGE("PHOTO_TOO_LARGE", "사진은 10MB 이하만 업로드할 수 있어요", HttpStatus.BAD_REQUEST),

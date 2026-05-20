@@ -18,4 +18,6 @@ public interface SelectionRepository extends JpaRepository<Selection, UUID> {
     );
 
     boolean existsBySelectorIdAndSelectedId(UUID selectorId, UUID selectedId);
+
+    boolean existsBySelectorIdAndSelectedIdAndType(UUID selectorId, UUID selectedId, SelectionType type);
 }

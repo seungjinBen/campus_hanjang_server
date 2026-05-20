@@ -19,4 +19,6 @@ public interface NoteRepository extends JpaRepository<Note, UUID> {
 
     @Query("SELECT n FROM Note n JOIN FETCH n.selector JOIN FETCH n.selected WHERE n.id = :noteId")
     Optional<Note> findByIdWithAll(@Param("noteId") UUID noteId);
+
+    boolean existsBySelectorIdAndSelectedId(UUID selectorId, UUID selectedId);
 }
