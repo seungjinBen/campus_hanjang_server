@@ -297,8 +297,10 @@ public class PhotoService {
 
         // 다운로드 토큰을 메타데이터에 포함 — 만료 없는 Firebase 영구 다운로드 URL 생성용
         String downloadToken = UUID.randomUUID().toString();
+        // 프로필 이미지는 변경이 드물므로 30일 브라우저/CDN 캐시 허용
         BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
                 .setContentType("image/jpeg")
+                .setCacheControl("public, max-age=2592000")
                 .setMetadata(Map.of("firebaseStorageDownloadTokens", downloadToken))
                 .build();
 
