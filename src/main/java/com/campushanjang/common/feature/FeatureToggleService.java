@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 
@@ -17,6 +18,8 @@ public class FeatureToggleService {
     private static final LocalDate USER_COLLECTION_START = LocalDate.of(2026, 5, 4);
     // 매칭 기능 오픈일 — 날짜 변경은 코드 수정 + 재배포가 유일한 방법 (클라이언트 조작 불가)
     private static final LocalDate MATCHING_FEATURE_START = LocalDate.of(2026, 5, 19);
+    // 매칭 서비스 종료 시각 — 5월 23일 자정(00:00) 이후 카드/선택/쪽지 전송 불가
+    private static final LocalDateTime MATCHING_TERMINATED_AT = LocalDateTime.of(2026, 5, 23, 0, 0, 0);
 
     /**
      * 매칭 기능 활성화 여부 — 오직 서버 시스템 시간(Asia/Seoul) 기준으로 판단한다.
@@ -24,6 +27,11 @@ public class FeatureToggleService {
      */
     public boolean isMatchingEnabled() {
         return !LocalDate.now(SEOUL).isBefore(MATCHING_FEATURE_START);
+    }
+
+    // 매칭 서비스가 종료됐는지 여부 (카드/선택/쪽지 전송 차단용)
+    public boolean isMatchingTerminated() {
+        return LocalDateTime.now(SEOUL).isAfter(MATCHING_TERMINATED_AT);
     }
 
     public boolean isUserCollectionEnabled() {

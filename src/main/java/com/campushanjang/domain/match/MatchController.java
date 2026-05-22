@@ -53,8 +53,9 @@ public class MatchController {
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
+    // 수신함·발신함은 서비스 종료 후에도 5월 29일까지 유지
     @GetMapping("/received/contacts")
-    @RequiresMatchingEnabled
+    @RequiresMatchingEnabled(allowAfterTermination = true)
     @UserRateLimit(operation = "match:received")
     public ResponseEntity<ApiResponse<List<ReceivedContactDto>>> getReceivedContacts(
             @AuthenticationPrincipal UserPrincipal principal
@@ -64,7 +65,7 @@ public class MatchController {
     }
 
     @GetMapping("/received/notes")
-    @RequiresMatchingEnabled
+    @RequiresMatchingEnabled(allowAfterTermination = true)
     @UserRateLimit(operation = "match:received")
     public ResponseEntity<ApiResponse<List<ReceivedNoteDto>>> getReceivedNotes(
             @AuthenticationPrincipal UserPrincipal principal
@@ -74,7 +75,7 @@ public class MatchController {
     }
 
     @PostMapping("/note/{noteId}/respond")
-    @RequiresMatchingEnabled
+    @RequiresMatchingEnabled(allowAfterTermination = true)
     @UserRateLimit(operation = "match:note:respond")
     public ResponseEntity<ApiResponse<NoteRespondResponseDto>> respondToNote(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -87,7 +88,7 @@ public class MatchController {
     }
 
     @GetMapping("/sent/notes")
-    @RequiresMatchingEnabled
+    @RequiresMatchingEnabled(allowAfterTermination = true)
     @UserRateLimit(operation = "match:received")
     public ResponseEntity<ApiResponse<List<SentNoteDto>>> getSentNotes(
             @AuthenticationPrincipal UserPrincipal principal

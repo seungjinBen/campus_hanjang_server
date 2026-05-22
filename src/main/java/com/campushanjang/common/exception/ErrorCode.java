@@ -22,6 +22,7 @@ public enum ErrorCode {
 
     // 매칭
     MATCHING_NOT_AVAILABLE("MATCHING_NOT_AVAILABLE", "매칭 기능은 아직 오픈되지 않았어요", HttpStatus.FORBIDDEN),
+    MATCHING_TERMINATED("MATCHING_TERMINATED", "캠퍼스한장 매칭 서비스가 종료됐어요", HttpStatus.GONE),
     DAILY_SELECT_LIMIT_EXCEEDED("DAILY_SELECT_LIMIT_EXCEEDED", "오늘 선택 횟수를 모두 사용했어요. 내일 자정에 초기화돼요", HttpStatus.CONFLICT),
     NO_CANDIDATES("NO_CANDIDATES", "아직 매칭 가능한 유저가 없어요", HttpStatus.NOT_FOUND),
     CANDIDATE_NOT_FOUND("CANDIDATE_NOT_FOUND", "유효하지 않은 후보예요", HttpStatus.BAD_REQUEST),

@@ -29,6 +29,7 @@ public class ServiceStatusController {
         ServiceStatusResponseDto status = new ServiceStatusResponseDto(
                 featureToggleService.isUserCollectionEnabled(),
                 featureToggleService.isMatchingEnabled(),
+                featureToggleService.isMatchingTerminated(),
                 featureToggleService.daysUntilMatchingOpen(),
                 featureToggleService.getMatchingOpenDate().toString(),
                 LocalDate.now(SEOUL).toString()
@@ -39,6 +40,7 @@ public class ServiceStatusController {
     public record ServiceStatusResponseDto(
             boolean userCollectionEnabled,
             boolean matchingEnabled,
+            boolean matchingTerminated,
             long daysUntilMatchingOpen,
             String matchingOpenDate,
             String serverDate
