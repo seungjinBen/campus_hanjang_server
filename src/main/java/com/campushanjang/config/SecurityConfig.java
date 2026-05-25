@@ -58,6 +58,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/auth/kakao/callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/local/login").permitAll() // 개발용 — 실서비스 전 삭제 예정
                         .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/dev/**").permitAll()  // k6 부하 테스트 토큰 발급 — dev 프로파일에서만 Bean 존재
                         .requestMatchers(HttpMethod.GET, "/api/service/status").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

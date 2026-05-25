@@ -3,6 +3,7 @@ package com.campushanjang.domain.user;
 import com.campushanjang.domain.user.entity.User;
 import com.campushanjang.domain.user.entity.enums.Gender;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -59,6 +60,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("SELECT u FROM User u WHERE u.isActive = true")
     List<User> findAllActive();
+
+    // k6 부하 테스트 전용 — DevAuthController에서만 호출, prod에서는 Bean 자체가 없음
+    List<User> findByKakaoIdStartingWithAndIsActiveTrue(String kakaoIdPrefix, Pageable pageable);
 
     // 자정 스케줄러에서 일괄 초기화 — DailySelectCountResetScheduler 전용
     @Modifying(clearAutomatically = true)

@@ -22,6 +22,14 @@ public class RateLimitConfig {
     @Value("${rate-limit.local-login-per-hour:10}")
     private long localLoginPerHour;
 
+    // prod: 30/min, dev: 부하 테스트 시 완화 (500VU 대응)
+    @Value("${rate-limit.user-cards-per-minute:30}")
+    private long userCardsPerMinute;
+
+    // prod: 10/min, dev: 부하 테스트 시 완화
+    @Value("${rate-limit.user-received-per-minute:10}")
+    private long userReceivedPerMinute;
+
     private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
             .expireAfterAccess(1, TimeUnit.HOURS)
             .maximumSize(50_000)
@@ -72,9 +80,9 @@ public class RateLimitConfig {
             case "match:note" -> Bandwidth.classic(20, Refill.greedy(20, Duration.ofHours(1)));
             case "match:note:respond" -> Bandwidth.classic(30, Refill.greedy(30, Duration.ofHours(1)));
             case "photo:upload" -> Bandwidth.classic(10, Refill.greedy(10, Duration.ofHours(1)));
-            // 분당 제한 — 자동화 스크립트로 정보 탈취 시도 차단
-            case "match:cards:read" -> Bandwidth.classic(30, Refill.greedy(30, Duration.ofMinutes(1)));
-            case "match:received" -> Bandwidth.classic(10, Refill.greedy(10, Duration.ofMinutes(1)));
+            // 분당 제한 — 자동화 스크립트로 정보 탈취 시도 차단 (dev에서는 완화 가능)
+            case "match:cards:read" -> Bandwidth.classic(userCardsPerMinute, Refill.greedy(userCardsPerMinute, Duration.ofMinutes(1)));
+            case "match:received" -> Bandwidth.classic(userReceivedPerMinute, Refill.greedy(userReceivedPerMinute, Duration.ofMinutes(1)));
             case "user:me:read" -> Bandwidth.classic(30, Refill.greedy(30, Duration.ofMinutes(1)));
             default -> Bandwidth.classic(30, Refill.greedy(30, Duration.ofHours(1)));
         };

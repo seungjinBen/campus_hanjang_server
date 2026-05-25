@@ -35,3 +35,7 @@ app:
 rate-limit:
   global-per-minute: 100000
   local-login-per-hour: 10000
+  # 유저별 per-endpoint 완화: 500VU × 500유저 = 유저당 ~1req/s → 분당 ~60req
+  # prod 기본값: cards=30/min, received=10/min
+  user-cards-per-minute: 2000
+  user-received-per-minute: 2000
