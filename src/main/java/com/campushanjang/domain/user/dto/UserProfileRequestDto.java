@@ -2,15 +2,13 @@ package com.campushanjang.domain.user.dto;
 
 import com.campushanjang.domain.user.entity.enums.ContactType;
 import com.campushanjang.domain.user.entity.enums.Gender;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
-
+// 생년월일·대학·학과는 학생인증에서 자동 입력되므로 요청으로 받지 않는다 (CLAUDE.md 16-1)
 @Getter
 @NoArgsConstructor
 public class UserProfileRequestDto {
@@ -21,12 +19,6 @@ public class UserProfileRequestDto {
 
     @NotNull
     private Gender gender;
-
-    @NotNull
-    @JsonFormat(pattern = "yyyyMMdd")
-    private LocalDate birthDate;
-
-    private String university;
 
     @NotNull
     private ContactType contactType;

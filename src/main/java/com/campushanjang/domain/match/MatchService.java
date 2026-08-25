@@ -17,6 +17,7 @@ import com.campushanjang.domain.user.UserTraitRepository;
 import com.campushanjang.domain.user.entity.IdealTrait;
 import com.campushanjang.domain.user.entity.User;
 import com.campushanjang.domain.user.entity.UserTrait;
+import com.campushanjang.domain.user.entity.enums.DeptFilterMode;
 import com.campushanjang.domain.user.entity.enums.Gender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -362,6 +363,9 @@ public class MatchService {
                 ? userRepository.findActiveByGender(oppositeGender)
                 : userRepository.findActiveCandidates(oppositeGender, recentIds);
 
+        // 학과 필터 (CLAUDE.md 16-4) — 풀 전체를 이미 로드하는 기존 구조라 인메모리 필터로 처리
+        pool = applyDeptFilter(user, pool);
+
         if (pool.isEmpty()) {
             return List.of();
         }
@@ -394,6 +398,24 @@ public class MatchService {
                 .collect(Collectors.toList());
 
         return dailyCardRepository.saveAll(cards);
+    }
+
+    // 내 학과 정보가 없으면(미인증 관리자 계정 등) 필터가 무의미하므로 전체 유지
+    private List<User> applyDeptFilter(User user, List<User> pool) {
+        String myDept = user.getVerifiedDepartment();
+        if (myDept == null || user.getDeptFilterMode() == DeptFilterMode.ALL) {
+            return pool;
+        }
+        return switch (user.getDeptFilterMode()) {
+            // 상대 학과가 null(미인증)이면 "같은 과"가 아니므로 SAME_ONLY에서 제외, EXCLUDE_SAME에서 포함
+            case SAME_ONLY -> pool.stream()
+                    .filter(c -> myDept.equals(c.getVerifiedDepartment()))
+                    .collect(Collectors.toList());
+            case EXCLUDE_SAME -> pool.stream()
+                    .filter(c -> !myDept.equals(c.getVerifiedDepartment()))
+                    .collect(Collectors.toList());
+            default -> pool;
+        };
     }
 
     /**

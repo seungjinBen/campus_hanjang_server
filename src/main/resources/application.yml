@@ -65,6 +65,18 @@ encryption:
   key: ${CONTACT_ENCRYPTION_KEY}
   iv: ${CONTACT_ENCRYPTION_IV}
 
+claude:
+  api-key: ${ANTHROPIC_API_KEY}
+  model: claude-haiku-4-5-20251001
+  max-tokens: 2048
+
+verification:
+  # 세종대 학번 형식 — 8자리 숫자 (예: 24011234). 형식 변경 시 여기만 수정
+  student-no-pattern: "^\\d{8}$"
+  allowed-university: 세종대학교
+  # 자동 승인 최소 신뢰도
+  auto-approve-threshold: 0.85
+
 admin:
   kakao-id: ${ADMIN_KAKAO_ID:}
 

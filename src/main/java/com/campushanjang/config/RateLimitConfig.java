@@ -80,6 +80,9 @@ public class RateLimitConfig {
             case "match:note" -> Bandwidth.classic(20, Refill.greedy(20, Duration.ofHours(1)));
             case "match:note:respond" -> Bandwidth.classic(30, Refill.greedy(30, Duration.ofHours(1)));
             case "photo:upload" -> Bandwidth.classic(10, Refill.greedy(10, Duration.ofHours(1)));
+            // LLM 비용 방어 — 시간당 5회면 정상 재시도(재촬영 2~3회)는 커버
+            case "verification:submit" -> Bandwidth.classic(5, Refill.greedy(5, Duration.ofHours(1)));
+            case "verification:status" -> Bandwidth.classic(30, Refill.greedy(30, Duration.ofMinutes(1)));
             // 분당 제한 — 자동화 스크립트로 정보 탈취 시도 차단 (dev에서는 완화 가능)
             case "match:cards:read" -> Bandwidth.classic(userCardsPerMinute, Refill.greedy(userCardsPerMinute, Duration.ofMinutes(1)));
             case "match:received" -> Bandwidth.classic(userReceivedPerMinute, Refill.greedy(userReceivedPerMinute, Duration.ofMinutes(1)));

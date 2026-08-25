@@ -20,6 +20,9 @@ public class UserProfileResponseDto {
     private final String university;
     private final ContactType contactType;
     private final String contactValue;
+    // 학과 필터 설정 UI용 — 인증으로 확인된 내 학과와 현재 필터 모드
+    private final String verifiedDepartment;
+    private final String deptFilterMode;
 
     public static UserProfileResponseDto of(User user, String decryptedContactValue) {
         return UserProfileResponseDto.builder()
@@ -30,6 +33,8 @@ public class UserProfileResponseDto {
                 .university(user.getUniversity())
                 .contactType(user.getContactType())
                 .contactValue(decryptedContactValue)
+                .verifiedDepartment(user.getVerifiedDepartment())
+                .deptFilterMode(user.getDeptFilterMode().name())
                 .build();
     }
 }

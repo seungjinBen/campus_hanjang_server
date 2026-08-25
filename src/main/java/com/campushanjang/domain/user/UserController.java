@@ -53,6 +53,15 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
+    @PatchMapping("/dept-filter")
+    public ResponseEntity<ApiResponse<Void>> updateDeptFilter(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody DeptFilterRequestDto request
+    ) {
+        userService.updateDeptFilterMode(principal.getId(), request.getMode());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
     @GetMapping("/profile-complete")
     public ResponseEntity<ApiResponse<UserService.ProfileCompleteResponseDto>> checkProfileComplete(
             @AuthenticationPrincipal UserPrincipal principal

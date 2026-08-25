@@ -1,6 +1,7 @@
 package com.campushanjang.domain.user.entity;
 
 import com.campushanjang.domain.user.entity.enums.ContactType;
+import com.campushanjang.domain.user.entity.enums.DeptFilterMode;
 import com.campushanjang.domain.user.entity.enums.Gender;
 import com.campushanjang.domain.user.entity.enums.UserRole;
 import jakarta.persistence.*;
@@ -61,6 +62,22 @@ public class User {
     @Column(name = "daily_select_count", nullable = false)
     private int dailySelectCount = 0;
 
+    // 학생인증 상태 — QR 캡처 에이전트 승인 시 true
+    @Column(name = "is_student_verified", nullable = false)
+    private boolean isStudentVerified = false;
+
+    @Column(name = "verified_university", length = 100)
+    private String verifiedUniversity;
+
+    // 인증으로 확인된 학과 — 매칭 필터용. 프로필 노출 여부는 UserTrait(MAJOR)의 isVisible이 담당
+    @Column(name = "verified_department", length = 100)
+    private String verifiedDepartment;
+
+    // 매칭 카드 풀 학과 필터 (전체 / 같은 과만 / 같은 과 제외)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dept_filter_mode", nullable = false, length = 20)
+    private DeptFilterMode deptFilterMode = DeptFilterMode.ALL;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -100,11 +117,10 @@ public class User {
         this.role = UserRole.ADMIN;
     }
 
-    public void updateProfile(String nickname, LocalDate birthDate, String university,
-                              ContactType contactType, String contactValueEncrypted, Gender gender) {
+    // 생년월일·대학은 학생인증(applyStudentVerification)이 관리 — 프로필 수정으로 덮어쓸 수 없다
+    public void updateProfile(String nickname, ContactType contactType,
+                              String contactValueEncrypted, Gender gender) {
         this.nickname = nickname;
-        this.birthDate = birthDate;
-        this.university = university;
         this.contactType = contactType;
         this.contactValueEncrypted = contactValueEncrypted;
         this.gender = gender;
@@ -112,6 +128,21 @@ public class User {
 
     public void updateLastLoginAt() {
         this.lastLoginAt = LocalDateTime.now();
+    }
+
+    // 학생인증 승인 시 추출 정보로 프로필 자동 채움 — 온보딩 입력 단계 축소
+    public void applyStudentVerification(String university, String department, LocalDate birthDate) {
+        this.isStudentVerified = true;
+        this.verifiedUniversity = university;
+        this.verifiedDepartment = department;
+        this.university = university;
+        if (birthDate != null) {
+            this.birthDate = birthDate;
+        }
+    }
+
+    public void updateDeptFilterMode(DeptFilterMode mode) {
+        this.deptFilterMode = mode;
     }
 
     public void incrementSelectCount() {

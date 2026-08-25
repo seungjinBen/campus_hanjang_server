@@ -11,6 +11,7 @@ import com.campushanjang.domain.user.dto.*;
 import com.campushanjang.domain.user.entity.IdealTrait;
 import com.campushanjang.domain.user.entity.User;
 import com.campushanjang.domain.user.entity.UserTrait;
+import com.campushanjang.domain.user.entity.enums.DeptFilterMode;
 import com.campushanjang.domain.user.entity.enums.TraitKey;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,19 +46,25 @@ public class UserService {
         }
 
         String sanitizedNickname = SANITIZER.sanitize(request.getNickname());
-        String sanitizedUniversity = request.getUniversity() != null
-                ? SANITIZER.sanitize(request.getUniversity()) : null;
         String encryptedContact = EncryptionUtil.encrypt(request.getContactValue());
 
+        // 생년월일·대학·학과는 학생인증(applyStudentVerification)이 관리 — 여기서 덮어쓰지 않는다
         user.updateProfile(
                 sanitizedNickname,
-                request.getBirthDate(),
-                sanitizedUniversity,
                 request.getContactType(),
                 encryptedContact,
                 request.getGender()
         );
         log.info("프로필 업데이트 userId={}", userId);
+    }
+
+    @Transactional
+    public void updateDeptFilterMode(UUID userId, DeptFilterMode mode) {
+        ownerValidator.validateOwner(userId);
+        User user = getUser(userId);
+        user.updateDeptFilterMode(mode);
+        // 오늘 카드는 유지 — 다음 자정 카드 생성부터 적용 (CLAUDE.md 16-4)
+        log.info("학과 필터 변경 userId={} mode={}", userId, mode);
     }
 
     @Transactional(readOnly = true)
@@ -116,6 +123,8 @@ public class UserService {
         User user = getUser(userId);
         List<String> missing = new ArrayList<>();
 
+        // 학생인증이 온보딩 1단계 — 미인증이면 complete=false 보장
+        if (!user.isStudentVerified()) missing.add("verification");
         if (user.getNickname() == null) missing.add("nickname");
         if (user.getGender() == null) missing.add("gender");
         if (user.getBirthDate() == null) missing.add("birthDate");
