@@ -82,13 +82,19 @@ public class UserService {
         User user = getUser(userId);
 
         for (TraitRequestDto dto : traitRequests) {
+            // 학과(MAJOR)는 학생인증에서 확정된 값만 허용 — 클라이언트 입력값은 무시 (위조 방지)
+            // 공개 여부(isVisible)만 클라이언트가 결정한다
+            String traitValue = (dto.getTraitKey() == TraitKey.MAJOR && user.getVerifiedDepartment() != null)
+                    ? user.getVerifiedDepartment()
+                    : dto.getTraitValue();
+
             userTraitRepository.findByUserIdAndTraitKey(userId, dto.getTraitKey())
                     .ifPresentOrElse(
-                            trait -> trait.update(dto.getTraitValue(), dto.isVisible()),
+                            trait -> trait.update(traitValue, dto.isVisible()),
                             () -> userTraitRepository.save(UserTrait.builder()
                                     .user(user)
                                     .traitKey(dto.getTraitKey())
-                                    .traitValue(dto.getTraitValue())
+                                    .traitValue(traitValue)
                                     .isVisible(dto.isVisible())
                                     .build())
                     );

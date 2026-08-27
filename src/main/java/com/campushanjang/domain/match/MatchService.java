@@ -403,19 +403,13 @@ public class MatchService {
     // 내 학과 정보가 없으면(미인증 관리자 계정 등) 필터가 무의미하므로 전체 유지
     private List<User> applyDeptFilter(User user, List<User> pool) {
         String myDept = user.getVerifiedDepartment();
-        if (myDept == null || user.getDeptFilterMode() == DeptFilterMode.ALL) {
+        if (myDept == null || user.getDeptFilterMode() != DeptFilterMode.EXCLUDE_SAME) {
             return pool;
         }
-        return switch (user.getDeptFilterMode()) {
-            // 상대 학과가 null(미인증)이면 "같은 과"가 아니므로 SAME_ONLY에서 제외, EXCLUDE_SAME에서 포함
-            case SAME_ONLY -> pool.stream()
-                    .filter(c -> myDept.equals(c.getVerifiedDepartment()))
-                    .collect(Collectors.toList());
-            case EXCLUDE_SAME -> pool.stream()
-                    .filter(c -> !myDept.equals(c.getVerifiedDepartment()))
-                    .collect(Collectors.toList());
-            default -> pool;
-        };
+        // 상대 학과가 null(미인증)이면 "같은 과"가 아니므로 포함
+        return pool.stream()
+                .filter(c -> !myDept.equals(c.getVerifiedDepartment()))
+                .collect(Collectors.toList());
     }
 
     /**

@@ -56,12 +56,12 @@ public class VerificationAdminService {
 
         if ("APPROVE".equals(action)) {
             verification.approveByReviewer(adminId);
-            User user = verification.getUser();
-            user.applyStudentVerification(
+            // 자동 승인과 동일 경로 — 유저 반영 + 학과 사전 + MAJOR 특징 자동 생성
+            resultProcessor.applyApproval(
+                    verification.getUser(),
                     verification.getExtractedUniversity(),
                     verification.getExtractedDepartment(),
                     verification.getExtractedBirthDate());
-            resultProcessor.registerDepartmentIfNew(verification.getExtractedDepartment());
 
             // 승인 학번 부분 유니크 인덱스를 커밋 전에 검증 — 충돌 시 표준 에러로 변환
             try {

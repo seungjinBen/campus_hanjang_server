@@ -3,7 +3,10 @@ package com.campushanjang.domain.verification;
 import com.campushanjang.common.exception.BusinessException;
 import com.campushanjang.common.exception.ErrorCode;
 import com.campushanjang.domain.user.UserRepository;
+import com.campushanjang.domain.user.UserTraitRepository;
 import com.campushanjang.domain.user.entity.User;
+import com.campushanjang.domain.user.entity.UserTrait;
+import com.campushanjang.domain.user.entity.enums.TraitKey;
 import com.campushanjang.domain.verification.agent.AgentDecision;
 import com.campushanjang.domain.verification.entity.Department;
 import com.campushanjang.domain.verification.entity.StudentVerification;
@@ -13,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -28,6 +32,7 @@ public class VerificationResultProcessor {
     private final StudentVerificationRepository verificationRepository;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
+    private final UserTraitRepository userTraitRepository;
 
     @Transactional
     public StudentVerification persist(UUID userId, AgentDecision decision, String imageHash) {
@@ -53,12 +58,34 @@ public class VerificationResultProcessor {
         verificationRepository.save(verification);
 
         if (decision.status() == VerificationStatus.AUTO_APPROVED) {
-            // 인증 추출 정보로 프로필 자동 채움 — 온보딩의 생년월일/대학/학과 입력 단계 제거
-            user.applyStudentVerification(decision.university(), decision.department(), decision.birthDate());
-            registerDepartmentIfNew(decision.department());
+            applyApproval(user, decision.university(), decision.department(), decision.birthDate());
         }
 
         return verification;
+    }
+
+    // 자동/수동 승인 공용 — 유저 반영 + 학과 사전 등록 + MAJOR 특징 자동 생성
+    @Transactional
+    public void applyApproval(User user, String university, String department, LocalDate birthDate) {
+        // 인증 추출 정보로 프로필 자동 채움 — 온보딩의 생년월일/대학/학과 입력 단계 제거
+        user.applyStudentVerification(university, department, birthDate);
+        registerDepartmentIfNew(department);
+        upsertMajorTrait(user, department);
+    }
+
+    // 카드 표시·매칭 점수용 학과(UserTrait MAJOR)도 인증 값으로 고정 — 유저 임의 입력 방지
+    private void upsertMajorTrait(User user, String department) {
+        if (department == null || department.isBlank()) return;
+        String dept = department.trim();
+        userTraitRepository.findByUserIdAndTraitKey(user.getId(), TraitKey.MAJOR)
+                .ifPresentOrElse(
+                        trait -> trait.update(dept, trait.isVisible()),
+                        () -> userTraitRepository.save(UserTrait.builder()
+                                .user(user)
+                                .traitKey(TraitKey.MAJOR)
+                                .traitValue(dept)
+                                .isVisible(true)
+                                .build()));
     }
 
     // 학과 동적 사전 — 승인 확정 시에만 신규 등록 (검수 대기 건이 사전을 오염시키지 않도록)
