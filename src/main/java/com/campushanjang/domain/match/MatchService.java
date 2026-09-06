@@ -400,15 +400,25 @@ public class MatchService {
         return dailyCardRepository.saveAll(cards);
     }
 
-    // 내 학과 정보가 없으면(미인증 관리자 계정 등) 필터가 무의미하므로 전체 유지
+    // EXCLUDE_SAME은 상호 배제 — "같은 과와 서로 안 보이게".
+    // 내가 걸든 상대가 걸든, 같은 과면 카드 풀에서 제외한다.
+    // 단방향이면 필터를 건 유저가 같은 과 상대의 카드에 노출되어 선택·연락처 공개까지 이어질 수 있다 (기능 의도 위반).
     private List<User> applyDeptFilter(User user, List<User> pool) {
         String myDept = user.getVerifiedDepartment();
-        if (myDept == null || user.getDeptFilterMode() != DeptFilterMode.EXCLUDE_SAME) {
+        // 내 학과 정보가 없으면(미인증 관리자 계정 등) "같은 과" 판정 자체가 불가 — 전체 유지
+        if (myDept == null) {
             return pool;
         }
-        // 상대 학과가 null(미인증)이면 "같은 과"가 아니므로 포함
+        boolean iExclude = user.getDeptFilterMode() == DeptFilterMode.EXCLUDE_SAME;
         return pool.stream()
-                .filter(c -> !myDept.equals(c.getVerifiedDepartment()))
+                .filter(c -> {
+                    // 상대 학과가 null(미인증)이면 "같은 과"가 아니므로 포함
+                    if (!myDept.equals(c.getVerifiedDepartment())) {
+                        return true;
+                    }
+                    boolean theyExclude = c.getDeptFilterMode() == DeptFilterMode.EXCLUDE_SAME;
+                    return !iExclude && !theyExclude;
+                })
                 .collect(Collectors.toList());
     }
 
