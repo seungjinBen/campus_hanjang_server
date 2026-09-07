@@ -35,6 +35,7 @@ public class JwtProvider {
         Date now = new Date();
         return Jwts.builder()
                 .subject(userId)
+                .claim("typ", "access")
                 .claim("gender", gender)
                 .claim("role", role)
                 .issuedAt(now)
@@ -47,10 +48,21 @@ public class JwtProvider {
         Date now = new Date();
         return Jwts.builder()
                 .subject(userId)
+                // typ 구분이 없으면 30일짜리 refresh JWT를 Bearer 헤더에 넣어 access처럼 쓸 수 있다 (보안 감사 H-3)
+                .claim("typ", "refresh")
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + refreshExpiration))
                 .signWith(secretKey)
                 .compact();
+    }
+
+    public String getTokenType(String token) {
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("typ", String.class);
     }
 
     public void validateToken(String token) {

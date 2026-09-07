@@ -313,6 +313,12 @@ public class PhotoService {
         );
     }
 
+    // 탈퇴 시 PII 파기 — DB 행은 ON DELETE CASCADE로 지워지지만 Firebase 파일은 직접 삭제해야 한다
+    public void deleteUserPhotoFromStorage(UUID userId) {
+        photoRepository.findByUserId(userId)
+                .ifPresent(photo -> deleteFromFirebase(photo.getStorageUrl()));
+    }
+
     private void deleteFromFirebase(String existingUrl) {
         try {
             // URL에서 경로 추출 후 삭제

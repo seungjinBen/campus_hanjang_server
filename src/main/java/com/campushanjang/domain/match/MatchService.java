@@ -58,6 +58,7 @@ public class MatchService {
     @Transactional
     public DailyCardsResponseDto getTodayCards(UUID userId) {
         User user = getUser(userId);
+        requireStudentVerified(user);
         LocalDate today = LocalDate.now();
 
         List<DailyCard> cards = dailyCardRepository.findByUserIdAndDate(userId, today);
@@ -83,6 +84,7 @@ public class MatchService {
         // 비관적 락 — 동시 요청이 dailySelectCount를 동시에 읽어 초과 선택하는 경쟁 조건 방지
         User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        requireStudentVerified(user);
 
         // 오늘의 카드에 포함된 후보인지 확인
         List<DailyCard> todayCards = dailyCardRepository.findByUserIdAndDate(userId, LocalDate.now());
@@ -153,6 +155,7 @@ public class MatchService {
     @Transactional
     public void sendNote(UUID userId, UUID selectedId, String rawContent) {
         User selector = getUser(userId);
+        requireStudentVerified(selector);
         User selected = userRepository.findById(selectedId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CANDIDATE_NOT_FOUND));
 
@@ -525,6 +528,13 @@ public class MatchService {
     private User getUser(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+    }
+
+    // 미인증 유저 진입 차단은 프론트 온보딩 UI만으로는 불충분 — API 직접 호출을 서버에서 막는다 (CLAUDE.md 16-1)
+    private void requireStudentVerified(User user) {
+        if (!user.isStudentVerified()) {
+            throw new BusinessException(ErrorCode.STUDENT_VERIFICATION_REQUIRED);
+        }
     }
 
     private record ScoredCandidate(User user, double score) {}

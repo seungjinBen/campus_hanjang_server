@@ -13,6 +13,8 @@ public interface AuthRepository extends JpaRepository<RefreshToken, UUID> {
 
     List<RefreshToken> findByUserIdAndIsRevokedFalse(UUID userId);
 
+    List<RefreshToken> findByUserId(UUID userId);
+
     @Modifying
     @Query("UPDATE RefreshToken r SET r.isRevoked = true WHERE r.user.id = :userId AND r.isRevoked = false")
     void revokeAllByUserId(@Param("userId") UUID userId);

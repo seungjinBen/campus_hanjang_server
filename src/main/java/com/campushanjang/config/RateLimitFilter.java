@@ -71,11 +71,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String getClientIp(HttpServletRequest request) {
+        String remoteAddr = request.getRemoteAddr();
         String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
+        // XFF는 같은 호스트의 리버스 프록시(Caddy)를 거친 요청에서만 신뢰한다.
+        // 프록시는 실제 접속 IP를 목록 끝에 append하므로 마지막 요소만 사용 —
+        // 앞쪽 요소는 클라이언트가 임의 삽입 가능해 rate limit 우회에 악용된다.
+        if (xForwardedFor != null && !xForwardedFor.isEmpty() && isTrustedProxy(remoteAddr)) {
+            String[] parts = xForwardedFor.split(",");
+            return parts[parts.length - 1].trim();
         }
-        return request.getRemoteAddr();
+        return remoteAddr;
+    }
+
+    private boolean isTrustedProxy(String addr) {
+        return "127.0.0.1".equals(addr) || "::1".equals(addr) || "0:0:0:0:0:0:0:1".equals(addr);
     }
 
     private void rejectRequest(HttpServletResponse response) throws IOException {

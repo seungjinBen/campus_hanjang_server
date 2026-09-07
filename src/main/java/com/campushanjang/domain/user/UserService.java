@@ -7,6 +7,7 @@ import com.campushanjang.common.util.EncryptionUtil;
 import com.campushanjang.domain.auth.WithdrawalBlocklistRepository;
 import com.campushanjang.domain.auth.entity.WithdrawalBlocklist;
 import com.campushanjang.domain.photo.PhotoRepository;
+import com.campushanjang.domain.photo.PhotoService;
 import com.campushanjang.domain.user.dto.*;
 import com.campushanjang.domain.user.entity.IdealTrait;
 import com.campushanjang.domain.user.entity.User;
@@ -31,6 +32,7 @@ public class UserService {
     private final UserTraitRepository userTraitRepository;
     private final IdealTraitRepository idealTraitRepository;
     private final PhotoRepository photoRepository;
+    private final PhotoService photoService;
     private final WithdrawalBlocklistRepository withdrawalBlocklistRepository;
     private final ResourceOwnerValidator ownerValidator;
 
@@ -152,7 +154,8 @@ public class UserService {
         withdrawalBlocklistRepository.save(WithdrawalBlocklist.builder()
                 .kakaoId(user.getKakaoId())
                 .build());
-        // Firebase Storage 파일은 ON DELETE CASCADE 이후 별도 정리 — 스케줄러 또는 수동 cleanup 예정
+        // 탈퇴 시 프로필 사진 즉시 파기 — DB 행은 CASCADE로 지워지지만 Firebase 파일은 남는다 (개인정보 파기 의무)
+        photoService.deleteUserPhotoFromStorage(userId);
         userRepository.delete(user);
         log.info("계정 삭제 userId={}", userId);
     }

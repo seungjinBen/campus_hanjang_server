@@ -147,27 +147,42 @@ public class AuthService {
     @Transactional
     public RefreshResult refresh(String rawRefreshToken) {
         jwtProvider.validateToken(rawRefreshToken);
-        String userId = jwtProvider.getUserId(rawRefreshToken);
-
-        List<RefreshToken> tokens = authRepository.findByUserIdAndIsRevokedFalse(UUID.fromString(userId));
-        boolean valid = tokens.stream()
-                .anyMatch(t -> passwordEncoder.matches(rawRefreshToken, t.getTokenHash())
-                        && t.getExpiresAt().isAfter(LocalDateTime.now()));
-
-        if (!valid) {
+        if (!"refresh".equals(jwtProvider.getTokenType(rawRefreshToken))) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
+        UUID userId = UUID.fromString(jwtProvider.getUserId(rawRefreshToken));
 
-        User user = userRepository.findById(UUID.fromString(userId))
+        // revoked 포함 전체 조회 — 폐기된 토큰 재사용을 탈취 신호로 감지하기 위함
+        RefreshToken matched = authRepository.findByUserId(userId).stream()
+                .filter(t -> passwordEncoder.matches(rawRefreshToken, t.getTokenHash()))
+                .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        if (matched.isRevoked()) {
+            // 회전으로 폐기된 토큰이 다시 사용됨 = 토큰 탈취 가능성 — 전체 세션 차단 (fail-safe)
+            authRepository.revokeAllByUserId(userId);
+            log.warn("폐기된 refresh token 재사용 감지 — 전체 세션 폐기 userId={}", userId);
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+        if (matched.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.TOKEN_EXPIRED);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        // 회전 — 사용된 refresh token은 즉시 폐기하고 새 토큰 발급 (CLAUDE.md §6)
+        matched.revoke();
+        String newRefreshToken = jwtProvider.issueRefreshToken(userId.toString());
+        saveRefreshToken(user, newRefreshToken);
 
         String genderStr = user.getGender() != null ? user.getGender().name() : null;
         String roleStr = user.getRole().name();
-        String newAccessToken = jwtProvider.issueAccessToken(userId, genderStr, roleStr);
-        return new RefreshResult(newAccessToken, roleStr);
+        String newAccessToken = jwtProvider.issueAccessToken(userId.toString(), genderStr, roleStr);
+        return new RefreshResult(newAccessToken, roleStr, newRefreshToken);
     }
 
-    public record RefreshResult(String accessToken, String role) {}
+    public record RefreshResult(String accessToken, String role, String refreshToken) {}
 
     @Transactional
     public void logout(UUID userId) {

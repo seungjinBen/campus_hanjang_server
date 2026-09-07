@@ -73,9 +73,14 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<TokenResponseDto>> refresh(HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<TokenResponseDto>> refresh(
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
         String rawRefreshToken = extractRefreshTokenFromCookie(request);
         AuthService.RefreshResult result = authService.refresh(rawRefreshToken);
+        // 회전된 새 refresh token으로 쿠키 교체
+        setRefreshTokenCookie(response, result.refreshToken());
 
         TokenResponseDto body = TokenResponseDto.builder()
                 .accessToken(result.accessToken())

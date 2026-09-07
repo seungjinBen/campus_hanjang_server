@@ -32,6 +32,7 @@ public enum ErrorCode {
     NOTE_ALREADY_SENT("NOTE_ALREADY_SENT", "이미 쪽지를 보낸 상대예요", HttpStatus.CONFLICT),
 
     // 학생인증
+    STUDENT_VERIFICATION_REQUIRED("STUDENT_VERIFICATION_REQUIRED", "학생인증을 완료해야 이용할 수 있어요", HttpStatus.FORBIDDEN),
     VERIFICATION_ALREADY_APPROVED("VERIFICATION_ALREADY_APPROVED", "이미 학생인증이 완료됐어요", HttpStatus.CONFLICT),
     VERIFICATION_DUPLICATE_IMAGE("VERIFICATION_DUPLICATE_IMAGE", "이미 사용된 캡처 이미지예요. 본인의 학생앱 화면을 새로 캡처해 주세요", HttpStatus.CONFLICT),
     VERIFICATION_STUDENT_NO_TAKEN("VERIFICATION_STUDENT_NO_TAKEN", "이미 인증에 사용된 학번이에요", HttpStatus.CONFLICT),

@@ -35,6 +35,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token)) {
             try {
                 jwtProvider.validateToken(token);
+                // refresh 토큰(30일)을 Bearer 헤더로 access처럼 쓰는 것 차단
+                if (!"access".equals(jwtProvider.getTokenType(token))) {
+                    log.warn("access 타입이 아닌 JWT 인증 시도 차단");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 String userId = jwtProvider.getUserId(token);
                 String genderStr = jwtProvider.getGender(token);
                 Gender gender = genderStr != null ? Gender.valueOf(genderStr) : null;
