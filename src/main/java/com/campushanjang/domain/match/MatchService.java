@@ -11,6 +11,7 @@ import com.campushanjang.domain.match.entity.Selection;
 import com.campushanjang.domain.match.entity.enums.NoteStatus;
 import com.campushanjang.domain.match.entity.enums.SelectionType;
 import com.campushanjang.domain.photo.PhotoRepository;
+import com.campushanjang.domain.referral.ReferralEventRepository;
 import com.campushanjang.domain.user.IdealTraitRepository;
 import com.campushanjang.domain.user.UserRepository;
 import com.campushanjang.domain.user.UserTraitRepository;
@@ -42,13 +43,14 @@ public class MatchService {
     private final UserTraitRepository userTraitRepository;
     private final IdealTraitRepository idealTraitRepository;
     private final PhotoRepository photoRepository;
+    private final ReferralEventRepository referralEventRepository;
 
     private static final PolicyFactory SANITIZER = Sanitizers.FORMATTING;
 
     // 남녀 모두 하루 10장 — 카드 희소성 규칙
     private static final int DAILY_CARD_LIMIT = 10;
-    // 하루 최대 선택 횟수 3회 — 선택 희소성 규칙
-    private static final int DAILY_SELECT_LIMIT = 3;
+    // 하루 기본 선택 횟수 — 얼리버드(+1)·리퍼럴 보너스(+1)로 최대 4회 (CLAUDE.md 16-5, 2026 가을 개정)
+    private static final int BASE_DAILY_SELECT_LIMIT = 2;
     // 일치율 75% 기준 — 연락처 즉시 공개 vs 쪽지 분기 임계값
     private static final double CONTACT_REVEAL_THRESHOLD = 0.75;
     // 서비스 공식 오픈일 — 이전에 스케줄러가 생성한 카드가 30일 제외 풀에 포함되지 않도록 하한선으로 사용
@@ -66,11 +68,13 @@ public class MatchService {
             cards = generateCardsInternal(user, today);
         }
 
-        int remaining = Math.max(0, DAILY_SELECT_LIMIT - user.getDailySelectCount());
+        int dailyLimit = dailySelectLimit(user);
+        int remaining = Math.max(0, dailyLimit - user.getDailySelectCount());
 
         return DailyCardsResponseDto.builder()
                 .cards(buildCardDtos(cards))
                 .remainingSelectCount(remaining)
+                .dailySelectLimit(dailyLimit)
                 .build();
     }
 
@@ -95,8 +99,8 @@ public class MatchService {
             return buildSelectResponse(chosenCard, selected);
         }
 
-        // 하루 선택 횟수 3회 초과 방지
-        if (user.getDailySelectCount() >= DAILY_SELECT_LIMIT) {
+        // 하루 선택 한도 초과 방지 — 유저별 동적 한도 (기본 2 + 얼리버드 + 리퍼럴)
+        if (user.getDailySelectCount() >= dailySelectLimit(user)) {
             throw new BusinessException(ErrorCode.DAILY_SELECT_LIMIT_EXCEEDED);
         }
 
@@ -499,6 +503,23 @@ public class MatchService {
         return photoRepository.findByUserId(userId)
                 .map(p -> p.getThumbnailUrl() != null ? p.getThumbnailUrl() : p.getStorageUrl())
                 .orElse(null);
+    }
+
+    /**
+     * 하루 선택 한도 = 기본 2 + 얼리버드(+1, 상시) + 리퍼럴 보너스(+1, rewarded_at이 오늘인 경우만).
+     * 한도 계산은 반드시 이 메서드 하나를 공유한다 — select()와 getTodayCards()의 불일치 방지 (CLAUDE.md 16-5)
+     */
+    private int dailySelectLimit(User user) {
+        int limit = BASE_DAILY_SELECT_LIMIT;
+        if (user.isEarlyBird()) {
+            limit++;
+        }
+        LocalDate today = LocalDate.now();
+        if (referralEventRepository.hasRewardBetween(user.getId(),
+                today.atStartOfDay(), today.plusDays(1).atStartOfDay())) {
+            limit++;
+        }
+        return limit;
     }
 
     private User getUser(UUID userId) {

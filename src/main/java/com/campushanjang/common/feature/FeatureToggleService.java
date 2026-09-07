@@ -22,6 +22,10 @@ public class FeatureToggleService {
     // 매칭 서비스 종료 시각 — 가을축제 종료일 확정 전까지 연말로 임시 설정
     private static final LocalDateTime MATCHING_TERMINATED_AT = LocalDateTime.of(2026, 12, 31, 0, 0, 0);
 
+    // 얼리버드 사전등록 기간 — 이 기간 내 학생인증 승인 완료 시 운영기간 내내 하루 선택 +1 (CLAUDE.md 16-5)
+    private static final LocalDate EARLY_BIRD_START = LocalDate.of(2026, 9, 21);
+    private static final LocalDate EARLY_BIRD_END = LocalDate.of(2026, 9, 27);
+
     /**
      * 매칭 기능 활성화 여부 — 오직 서버 시스템 시간(Asia/Seoul) 기준으로 판단한다.
      * 클라이언트 요청의 어떤 값도 이 판단에 영향을 줄 수 없다.
@@ -33,6 +37,12 @@ public class FeatureToggleService {
     // 매칭 서비스가 종료됐는지 여부 (카드/선택/쪽지 전송 차단용)
     public boolean isMatchingTerminated() {
         return LocalDateTime.now(SEOUL).isAfter(MATCHING_TERMINATED_AT);
+    }
+
+    // 얼리버드 판정도 서버 시간(Asia/Seoul) 기준 — 클라이언트 값 개입 불가
+    public boolean isEarlyBirdPeriod() {
+        LocalDate today = LocalDate.now(SEOUL);
+        return !today.isBefore(EARLY_BIRD_START) && !today.isAfter(EARLY_BIRD_END);
     }
 
     public boolean isUserCollectionEnabled() {

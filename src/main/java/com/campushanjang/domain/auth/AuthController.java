@@ -40,9 +40,10 @@ public class AuthController {
     @GetMapping("/kakao/callback")
     public ResponseEntity<ApiResponse<TokenResponseDto>> kakaoCallback(
             @RequestParam String code,
+            @RequestParam(required = false) String ref,   // 초대 코드 — 프론트가 localStorage에서 첨부
             HttpServletResponse response
     ) {
-        AuthService.KakaoLoginResult result = authService.kakaoLogin(code);
+        AuthService.KakaoLoginResult result = authService.kakaoLogin(code, ref);
         setRefreshTokenCookie(response, result.refreshToken());
 
         TokenResponseDto body = TokenResponseDto.builder()
@@ -59,7 +60,8 @@ public class AuthController {
             @RequestBody @Valid LocalLoginRequestDto request,
             HttpServletResponse response
     ) {
-        AuthService.KakaoLoginResult result = authService.localLogin(request.getEmail(), request.getPassword());
+        AuthService.KakaoLoginResult result = authService.localLogin(
+                request.getEmail(), request.getPassword(), request.getRefCode());
         setRefreshTokenCookie(response, result.refreshToken());
 
         TokenResponseDto body = TokenResponseDto.builder()

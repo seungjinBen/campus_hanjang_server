@@ -29,6 +29,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // JWT 유효성 2차 검증 — 탈퇴·비활성화 계정으로 발급된 토큰 차단
     boolean existsByIdAndIsActiveTrue(UUID id);
 
+    Optional<User> findByReferralCode(String referralCode);
+
+    boolean existsByReferralCode(String referralCode);
+
     // select() 전용 — 선택 횟수 차감 중 동시 요청으로 인한 초과 방지
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM User u WHERE u.id = :id")

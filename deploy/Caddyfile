@@ -1,0 +1,8 @@
+# /etc/caddy/Caddyfile
+# 설치: sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# Let's Encrypt 인증서 자동 발급·갱신 — DNS의 api A레코드가 이 VM을 가리켜야 발급됨
+
+api.campushanjang.kr {
+	reverse_proxy localhost:8080
+	encode gzip
+}

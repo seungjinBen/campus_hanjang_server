@@ -78,6 +78,18 @@ public class User {
     @Column(name = "dept_filter_mode", nullable = false, length = 20)
     private DeptFilterMode deptFilterMode = DeptFilterMode.ALL;
 
+    // 얼리버드: 사전등록 기간 내 학생인증 승인 완료 — 운영기간 내내 하루 선택 +1 (CLAUDE.md 16-5)
+    @Column(name = "is_early_bird", nullable = false)
+    private boolean isEarlyBird = false;
+
+    // 내 초대 코드 — 첫 공유 요청 시 lazy 생성
+    @Column(name = "referral_code", unique = true, length = 12)
+    private String referralCode;
+
+    // 나를 초대한 유저 — 가입 시 1회만 기록
+    @Column(name = "referred_by")
+    private UUID referredBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -143,6 +155,18 @@ public class User {
 
     public void updateDeptFilterMode(DeptFilterMode mode) {
         this.deptFilterMode = mode;
+    }
+
+    public void markEarlyBird() {
+        this.isEarlyBird = true;
+    }
+
+    public void assignReferralCode(String code) {
+        this.referralCode = code;
+    }
+
+    public void applyReferredBy(UUID referrerId) {
+        this.referredBy = referrerId;
     }
 
     public void incrementSelectCount() {

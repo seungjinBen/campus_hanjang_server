@@ -52,7 +52,7 @@ jwt:
   refresh-expiration: 2592000000
 
 kakao:
-  client-id: 8579221dc3dd585ce61aafcdcf77cb16
+  client-id: ${KAKAO_CLIENT_ID}
   client-secret: ${KAKAO_CLIENT_SECRET}
   redirect-uri: ${KAKAO_REDIRECT_URI}
 

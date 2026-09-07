@@ -18,4 +18,7 @@ public class LocalLoginRequestDto {
     @NotBlank
     @Size(min = 4, max = 50)
     private String password;
+
+    // 초대 코드 (선택) — 리퍼럴 E2E 테스트용
+    private String refCode;
 }

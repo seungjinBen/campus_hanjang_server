@@ -1,0 +1,21 @@
+# /etc/systemd/system/campus-hanjang.service
+# 설치: sudo cp deploy/campus-hanjang.service /etc/systemd/system/
+#       sudo systemctl daemon-reload && sudo systemctl enable --now campus-hanjang
+
+[Unit]
+Description=CampusHanjang Spring Boot
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/app
+EnvironmentFile=/home/ubuntu/app/.env
+# -Duser.timezone: OS 타임존과 이중 보장 — 자정 스케줄러·LocalDate.now가 KST 기준이어야 함
+ExecStart=/usr/bin/java -Duser.timezone=Asia/Seoul -jar /home/ubuntu/app/app.jar
+Restart=always
+RestartSec=5
+# graceful shutdown (server.shutdown: graceful, 30s) 대기
+TimeoutStopSec=40
+
+[Install]
+WantedBy=multi-user.target

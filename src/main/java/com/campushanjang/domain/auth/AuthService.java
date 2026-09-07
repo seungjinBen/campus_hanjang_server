@@ -5,6 +5,8 @@ import com.campushanjang.common.exception.ErrorCode;
 import com.campushanjang.domain.auth.dto.KakaoUserInfoDto;
 import com.campushanjang.domain.auth.dto.TokenResponseDto;
 import com.campushanjang.domain.auth.entity.RefreshToken;
+import com.campushanjang.domain.referral.ReferralEventRepository;
+import com.campushanjang.domain.referral.entity.ReferralEvent;
 import com.campushanjang.domain.user.UserRepository;
 import com.campushanjang.domain.user.entity.User;
 import com.campushanjang.security.JwtProvider;
@@ -30,6 +32,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final AuthRepository authRepository;
     private final WithdrawalBlocklistRepository withdrawalBlocklistRepository;
+    private final ReferralEventRepository referralEventRepository;
     private final JwtProvider jwtProvider;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -41,7 +44,7 @@ public class AuthService {
     }
 
     @Transactional
-    public KakaoLoginResult kakaoLogin(String code) {
+    public KakaoLoginResult kakaoLogin(String code, String refCode) {
         String kakaoAccessToken = kakaoOAuthClient.getAccessToken(code);
         KakaoUserInfoDto kakaoUserInfo = kakaoOAuthClient.getUserInfo(kakaoAccessToken);
         String kakaoId = kakaoUserInfo.getKakaoId();
@@ -62,6 +65,11 @@ public class AuthService {
                 });
 
         user.updateLastLoginAt();
+
+        // 리퍼럴 가입 기록 — 신규 가입 시에만, PENDING 상태로 (보상은 학생인증 승인 시 확정)
+        if (isNewUser) {
+            applyReferral(user, refCode);
+        }
 
         // ADMIN_KAKAO_ID 환경변수에 등록된 카카오 ID면 관리자 역할 부여
         if (!adminKakaoId.isBlank() && adminKakaoId.equals(kakaoUserInfo.getKakaoId())
@@ -84,9 +92,26 @@ public class AuthService {
 
     public record KakaoLoginResult(String accessToken, String refreshToken, boolean isNewUser, String role) {}
 
+    // 초대 코드로 초대자 조회 → referred_by 기록 + PENDING 이벤트 생성. 실패는 가입을 막지 않는다 (fail-safe)
+    private void applyReferral(User newUser, String refCode) {
+        if (refCode == null || refCode.isBlank()) return;
+        userRepository.findByReferralCode(refCode.trim().toUpperCase())
+                .filter(referrer -> !referrer.getId().equals(newUser.getId())) // 자기 초대 금지
+                .ifPresent(referrer -> {
+                    // referee UNIQUE의 애플리케이션 선검사 — 동시성은 DB 제약이 최종 방어
+                    if (referralEventRepository.existsByRefereeId(newUser.getId())) return;
+                    newUser.applyReferredBy(referrer.getId());
+                    referralEventRepository.save(ReferralEvent.builder()
+                            .referrer(referrer)
+                            .referee(newUser)
+                            .build());
+                    log.info("리퍼럴 가입 기록 referrerId={} refereeId={}", referrer.getId(), newUser.getId());
+                });
+    }
+
     // 개발용 로컬 로그인 — 실서비스 전 삭제 예정
     @Transactional
-    public KakaoLoginResult localLogin(String email, String password) {
+    public KakaoLoginResult localLogin(String email, String password, String refCode) {
         User user = userRepository.findByEmail(email).orElse(null);
         boolean isNewUser = (user == null);
 
@@ -96,6 +121,7 @@ public class AuthService {
                     .email(email)
                     .passwordHash(passwordEncoder.encode(password))
                     .build());
+            applyReferral(user, refCode);
             log.info("로컬 계정 생성 userId={}", user.getId());
         } else {
             if (user.getPasswordHash() == null

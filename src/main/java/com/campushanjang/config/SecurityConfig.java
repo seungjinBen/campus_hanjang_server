@@ -60,6 +60,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/dev/**").permitAll()  // k6 부하 테스트 토큰 발급 — dev 프로파일에서만 Bean 존재
                         .requestMatchers(HttpMethod.GET, "/api/service/status").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/referral/preview").permitAll()  // 초대 링크 OG 미리보기 — 닉네임만 반환
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

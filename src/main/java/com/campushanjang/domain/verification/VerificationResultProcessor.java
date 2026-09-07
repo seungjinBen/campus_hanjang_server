@@ -2,6 +2,9 @@ package com.campushanjang.domain.verification;
 
 import com.campushanjang.common.exception.BusinessException;
 import com.campushanjang.common.exception.ErrorCode;
+import com.campushanjang.common.feature.FeatureToggleService;
+import com.campushanjang.domain.referral.ReferralEventRepository;
+import com.campushanjang.domain.referral.entity.enums.ReferralStatus;
 import com.campushanjang.domain.user.UserRepository;
 import com.campushanjang.domain.user.UserTraitRepository;
 import com.campushanjang.domain.user.entity.User;
@@ -33,6 +36,8 @@ public class VerificationResultProcessor {
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final UserTraitRepository userTraitRepository;
+    private final FeatureToggleService featureToggleService;
+    private final ReferralEventRepository referralEventRepository;
 
     @Transactional
     public StudentVerification persist(UUID userId, AgentDecision decision, String imageHash) {
@@ -64,13 +69,28 @@ public class VerificationResultProcessor {
         return verification;
     }
 
-    // 자동/수동 승인 공용 — 유저 반영 + 학과 사전 등록 + MAJOR 특징 자동 생성
+    // 자동/수동 승인 공용 — 유저 반영 + 학과 사전 등록 + MAJOR 특징 자동 생성 + 얼리버드/리퍼럴 처리
     @Transactional
     public void applyApproval(User user, String university, String department, LocalDate birthDate) {
         // 인증 추출 정보로 프로필 자동 채움 — 온보딩의 생년월일/대학/학과 입력 단계 제거
         user.applyStudentVerification(university, department, birthDate);
         registerDepartmentIfNew(department);
         upsertMajorTrait(user, department);
+
+        // 얼리버드: 사전등록 기간 내 인증 승인 완료 → 운영기간 내내 하루 선택 +1 (CLAUDE.md 16-5)
+        if (featureToggleService.isEarlyBirdPeriod()) {
+            user.markEarlyBird();
+            log.info("얼리버드 확정 userId={}", user.getId());
+        }
+
+        // 리퍼럴 보상 확정: 초대받은 유저가 인증 승인에 도달 → 초대자에게 당일 +1
+        // 가입 시점(PENDING)이 아니라 승인 시점에 확정 — 가입만 반복하는 어뷰징 차단
+        referralEventRepository.findByRefereeIdAndStatus(user.getId(), ReferralStatus.PENDING)
+                .ifPresent(event -> {
+                    event.reward();
+                    log.info("리퍼럴 보상 확정 referrerId={} refereeId={}",
+                            event.getReferrer().getId(), user.getId());
+                });
     }
 
     // 카드 표시·매칭 점수용 학과(UserTrait MAJOR)도 인증 값으로 고정 — 유저 임의 입력 방지
