@@ -1,14 +1,18 @@
 # /etc/systemd/system/campus-hanjang.service
 # 설치: sudo cp deploy/campus-hanjang.service /etc/systemd/system/
 #       sudo systemctl daemon-reload && sudo systemctl enable --now campus-hanjang
+# 전용 계정(campushanjang)은 setup-server.sh가 생성한다
 
 [Unit]
 Description=CampusHanjang Spring Boot
 After=network.target
 
 [Service]
-User=ubuntu
+# sudo 가능한 ubuntu 계정 대신 비로그인 전용 계정 — 앱 RCE 시 수평 상승 차단
+User=campushanjang
+Group=campushanjang
 WorkingDirectory=/home/ubuntu/app
+# EnvironmentFile은 systemd(root)가 읽으므로 .env는 600 권한 유지 가능
 EnvironmentFile=/home/ubuntu/app/.env
 # -Duser.timezone: OS 타임존과 이중 보장 — 자정 스케줄러·LocalDate.now가 KST 기준이어야 함
 ExecStart=/usr/bin/java -Duser.timezone=Asia/Seoul -jar /home/ubuntu/app/app.jar
@@ -16,6 +20,20 @@ Restart=always
 RestartSec=5
 # graceful shutdown (server.shutdown: graceful, 30s) 대기
 TimeoutStopSec=40
+
+# --- 하드닝: 앱이 탈취되어도 시스템 변조·권한 상승을 막는다 ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/app/logs
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

@@ -8,5 +8,7 @@ import java.util.UUID;
 
 public interface WithdrawalBlocklistRepository extends JpaRepository<WithdrawalBlocklist, UUID> {
 
-    boolean existsByKakaoIdAndReregistrationAllowedAtAfter(String kakaoId, LocalDateTime now);
+    boolean existsByKakaoIdHashAndReregistrationAllowedAtAfter(String kakaoIdHash, LocalDateTime now);
+
+    long deleteByReregistrationAllowedAtBefore(LocalDateTime cutoff);
 }

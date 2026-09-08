@@ -38,11 +38,22 @@ if ! swapon --show | grep -q swapfile; then
 fi
 free -h
 
-echo "=== 6. 앱 디렉토리 ==="
+echo "=== 6. 앱 디렉토리 + 전용 실행 계정 ==="
 mkdir -p /home/ubuntu/app/logs
+
+# 서비스는 sudo 없는 전용 계정으로 구동 (systemd User=campushanjang)
+if ! id campushanjang &>/dev/null; then
+  sudo useradd --system --no-create-home --shell /usr/sbin/nologin campushanjang
+fi
+# /home/ubuntu(750) 통과를 위해 ubuntu 그룹에 추가 — 배포(scp/mv)는 계속 ubuntu가 수행
+sudo usermod -aG ubuntu campushanjang
+sudo chown -R ubuntu:campushanjang /home/ubuntu/app
+sudo chmod -R g+rX /home/ubuntu/app
+sudo chmod g+w /home/ubuntu/app/logs
 
 echo ""
 echo "✅ 초기 세팅 완료. 다음 순서:"
 echo "  1) /home/ubuntu/app/.env 작성 (deploy/.env.prod.example 참고)"
+echo "     작성 후 반드시: chmod 600 /home/ubuntu/app/.env"
 echo "  2) deploy/campus-hanjang.service → /etc/systemd/system/ 복사 후 enable"
 echo "  3) deploy/Caddyfile → /etc/caddy/Caddyfile 교체 후 caddy reload"

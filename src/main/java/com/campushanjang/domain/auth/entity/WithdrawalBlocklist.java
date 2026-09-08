@@ -19,8 +19,9 @@ public class WithdrawalBlocklist {
     @Column(columnDefinition = "uuid", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "kakao_id", nullable = false, length = 50)
-    private String kakaoId;
+    // HMAC-SHA256 해시 — 평문 카카오 ID를 목적(재가입 차단) 이상으로 보존하지 않는다
+    @Column(name = "kakao_id_hash", nullable = false, length = 64)
+    private String kakaoIdHash;
 
     @Column(name = "withdrawn_at", nullable = false)
     private LocalDateTime withdrawnAt;
@@ -30,8 +31,8 @@ public class WithdrawalBlocklist {
     private LocalDateTime reregistrationAllowedAt;
 
     @Builder
-    public WithdrawalBlocklist(String kakaoId) {
-        this.kakaoId = kakaoId;
+    public WithdrawalBlocklist(String kakaoIdHash) {
+        this.kakaoIdHash = kakaoIdHash;
         this.withdrawnAt = LocalDateTime.now();
         this.reregistrationAllowedAt = this.withdrawnAt.plusHours(24);
     }

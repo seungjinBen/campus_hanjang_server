@@ -33,9 +33,15 @@ public class DateManipulationFilter extends OncePerRequestFilter {
             String value = request.getHeader(header);
             if (value != null) {
                 log.warn("날짜 조작 의심 헤더 감지 header={} value={} ip={}",
-                        header, value, request.getRemoteAddr());
+                        header, sanitizeForLog(value), request.getRemoteAddr());
             }
         });
         filterChain.doFilter(request, response);
+    }
+
+    // 공격자 제어 값의 CRLF 로그 인젝션 방지
+    private String sanitizeForLog(String value) {
+        String cleaned = value.replaceAll("[\\r\\n]", "_");
+        return cleaned.length() > 100 ? cleaned.substring(0, 100) + "..." : cleaned;
     }
 }

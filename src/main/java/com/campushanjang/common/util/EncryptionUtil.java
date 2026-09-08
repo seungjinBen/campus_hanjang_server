@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
@@ -11,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HexFormat;
 
 @Component
 public class EncryptionUtil {
@@ -54,6 +56,18 @@ public class EncryptionUtil {
             return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new IllegalStateException("복호화 실패", e);
+        }
+    }
+
+    // 탈퇴 블록리스트 대조용 결정적 해시 — 평문 카카오 ID 보존 금지.
+    // AES 키 재사용은 HMAC과 AES가 서로 다른 연산이라 안전하며, 별도 키 관리 부담을 줄인다.
+    public static String hmacSha256(String value) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(keyBytes, "HmacSHA256"));
+            return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("HMAC 계산 실패", e);
         }
     }
 

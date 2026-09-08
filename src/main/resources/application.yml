@@ -5,8 +5,8 @@ spring:
     name: campus-hanjang
   datasource:
     url: jdbc:postgresql://localhost:5432/campus
-    username: bsjworld
-    password: seungjin
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -44,7 +44,8 @@ management:
         include: health
   endpoint:
     health:
-      show-details: always
+      # DB·Firebase 컴포넌트 상세는 비인증 공개 금지 — 로드밸런서는 status(UP/DOWN)만 필요
+      show-details: when_authorized
 
 jwt:
   secret: ${JWT_SECRET}

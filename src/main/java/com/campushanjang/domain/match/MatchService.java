@@ -66,7 +66,13 @@ public class MatchService {
         // 카드가 아예 없는 경우(자정 이후 신규 가입자)에만 온디맨드 생성
         // 탈퇴로 줄어든 카드(예: 9장)는 보충하지 않음 — cards.size() > 0 이면 그대로 유지
         if (cards.isEmpty()) {
-            cards = generateCardsInternal(user, today);
+            // 동시 첫 요청 2건이 모두 빈 상태를 읽고 각자 10장씩 생성하는 경쟁 조건 방지 — 유저 행 락으로 직렬화
+            user = userRepository.findByIdForUpdate(userId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+            cards = dailyCardRepository.findByUserIdAndDate(userId, today);
+            if (cards.isEmpty()) {
+                cards = generateCardsInternal(user, today);
+            }
         }
 
         int dailyLimit = dailySelectLimit(user);
@@ -95,10 +101,14 @@ public class MatchService {
 
         User selected = chosenCard.getCandidate();
 
-        // 이미 선택한 상대 재선택 시 횟수 차감 없이 동일한 결과 반환
-        if (selectionRepository.existsBySelectorIdAndSelectedId(userId, candidateId)) {
+        // 이미 선택한 상대 재선택 시 횟수 차감 없이 동일한 결과 반환.
+        // 반드시 기존 Selection의 타입 기준으로 응답 — 오늘 카드의 새 점수로 재평가하면
+        // 과거 NOTE_SENT 상대의 연락처가 횟수 차감·수신함 기록 없이 공개될 수 있다 (보안 감사 M-3)
+        Optional<Selection> existing =
+                selectionRepository.findFirstBySelectorIdAndSelectedIdOrderByCreatedAtDesc(userId, candidateId);
+        if (existing.isPresent()) {
             log.info("재선택(횟수 차감 없음) selectorId={} selectedId={}", userId, candidateId);
-            return buildSelectResponse(chosenCard, selected);
+            return buildSelectResponse(existing.get().getType(), selected);
         }
 
         // 하루 선택 한도 초과 방지 — 유저별 동적 한도 (기본 2 + 얼리버드 + 리퍼럴)
@@ -108,31 +118,24 @@ public class MatchService {
 
         user.incrementSelectCount();
 
-        if (chosenCard.getMatchScore() >= CONTACT_REVEAL_THRESHOLD) {
-            selectionRepository.save(Selection.builder()
-                    .selector(user)
-                    .selected(selected)
-                    .type(SelectionType.CONTACT_REVEALED)
-                    .matchScore(chosenCard.getMatchScore())
-                    .build());
-            log.info("연락처 공개 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
-        } else {
-            // NOTE_REQUIRED: Selection을 즉시 저장해야 더블탭·네트워크 재시도 시 멱등성 가드가 동작한다.
-            // 저장하지 않으면 existsBySelectorIdAndSelectedId가 항상 false를 반환해 횟수가 중복 차감된다.
-            selectionRepository.save(Selection.builder()
-                    .selector(user)
-                    .selected(selected)
-                    .type(SelectionType.NOTE_SENT)
-                    .matchScore(chosenCard.getMatchScore())
-                    .build());
-            log.info("쪽지 유도 selectorId={} selectedId={} score={}", userId, candidateId, chosenCard.getMatchScore());
-        }
+        // NOTE_SENT도 Selection을 즉시 저장해야 더블탭·네트워크 재시도 시 멱등성 가드가 동작한다.
+        SelectionType type = chosenCard.getMatchScore() >= CONTACT_REVEAL_THRESHOLD
+                ? SelectionType.CONTACT_REVEALED
+                : SelectionType.NOTE_SENT;
+        selectionRepository.save(Selection.builder()
+                .selector(user)
+                .selected(selected)
+                .type(type)
+                .matchScore(chosenCard.getMatchScore())
+                .build());
+        log.info("선택 발생 selectorId={} selectedId={} score={} type={}",
+                userId, candidateId, chosenCard.getMatchScore(), type);
 
-        return buildSelectResponse(chosenCard, selected);
+        return buildSelectResponse(type, selected);
     }
 
-    private SelectResponseDto buildSelectResponse(DailyCard chosenCard, User selected) {
-        if (chosenCard.getMatchScore() >= CONTACT_REVEAL_THRESHOLD) {
+    private SelectResponseDto buildSelectResponse(SelectionType type, User selected) {
+        if (type == SelectionType.CONTACT_REVEALED) {
             // 연락처 복호화 — 70% 이상 일치 시에만 허용
             String contactValue = selected.getContactValueEncrypted() != null
                     ? EncryptionUtil.decrypt(selected.getContactValueEncrypted()) : null;

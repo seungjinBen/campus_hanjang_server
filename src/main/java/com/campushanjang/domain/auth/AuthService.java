@@ -2,6 +2,7 @@ package com.campushanjang.domain.auth;
 
 import com.campushanjang.common.exception.BusinessException;
 import com.campushanjang.common.exception.ErrorCode;
+import com.campushanjang.common.util.EncryptionUtil;
 import com.campushanjang.domain.auth.dto.KakaoUserInfoDto;
 import com.campushanjang.domain.auth.dto.TokenResponseDto;
 import com.campushanjang.domain.auth.entity.RefreshToken;
@@ -39,8 +40,8 @@ public class AuthService {
     @Value("${admin.kakao-id:}")
     private String adminKakaoId;
 
-    public String getKakaoAuthorizationUrl() {
-        return kakaoOAuthClient.buildAuthorizationUrl();
+    public String getKakaoAuthorizationUrl(String state) {
+        return kakaoOAuthClient.buildAuthorizationUrl(state);
     }
 
     @Transactional
@@ -52,7 +53,8 @@ public class AuthService {
         boolean isNewUser = !userRepository.findByKakaoId(kakaoId).isPresent();
 
         if (isNewUser && withdrawalBlocklistRepository
-                .existsByKakaoIdAndReregistrationAllowedAtAfter(kakaoId, LocalDateTime.now())) {
+                .existsByKakaoIdHashAndReregistrationAllowedAtAfter(
+                        EncryptionUtil.hmacSha256(kakaoId), LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.WITHDRAWAL_REREGISTRATION_BLOCKED);
         }
 

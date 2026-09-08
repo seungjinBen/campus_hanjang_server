@@ -31,7 +31,7 @@ public class SecurityAuditFilter extends OncePerRequestFilter {
         if (isSensitive) {
             log.info("민감 경로 접근 ip={} method={} path={} ua={}",
                     getClientIp(request), request.getMethod(), path,
-                    request.getHeader("User-Agent"));
+                    sanitizeForLog(request.getHeader("User-Agent")));
         }
         filterChain.doFilter(request, response);
     }
@@ -39,6 +39,13 @@ public class SecurityAuditFilter extends OncePerRequestFilter {
     // X-Forwarded-For는 조작 가능하므로 참고용으로만 사용
     private String getClientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
-        return forwarded != null ? forwarded.split(",")[0].trim() : request.getRemoteAddr();
+        return forwarded != null ? sanitizeForLog(forwarded.split(",")[0].trim()) : request.getRemoteAddr();
+    }
+
+    // 공격자 제어 값의 CRLF 로그 인젝션 방지
+    private String sanitizeForLog(String value) {
+        if (value == null) return null;
+        String cleaned = value.replaceAll("[\\r\\n]", "_");
+        return cleaned.length() > 200 ? cleaned.substring(0, 200) + "..." : cleaned;
     }
 }

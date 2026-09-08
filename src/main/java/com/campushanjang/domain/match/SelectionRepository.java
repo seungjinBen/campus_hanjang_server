@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface SelectionRepository extends JpaRepository<Selection, UUID> {
@@ -18,6 +19,8 @@ public interface SelectionRepository extends JpaRepository<Selection, UUID> {
     );
 
     boolean existsBySelectorIdAndSelectedId(UUID selectorId, UUID selectedId);
+
+    Optional<Selection> findFirstBySelectorIdAndSelectedIdOrderByCreatedAtDesc(UUID selectorId, UUID selectedId);
 
     boolean existsBySelectorIdAndSelectedIdAndType(UUID selectorId, UUID selectedId, SelectionType type);
 }

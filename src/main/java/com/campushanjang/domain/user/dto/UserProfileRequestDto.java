@@ -24,5 +24,6 @@ public class UserProfileRequestDto {
     private ContactType contactType;
 
     @NotBlank
+    @Size(max = 100, message = "연락처는 100자 이내여야 해요")
     private String contactValue;
 }

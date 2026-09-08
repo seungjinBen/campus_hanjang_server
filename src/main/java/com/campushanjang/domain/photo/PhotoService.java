@@ -136,6 +136,12 @@ public class PhotoService {
 
     @Transactional
     public void updateThumbnail(UUID userId, String thumbnailUrl) {
+        // 자사 버킷 URL만 허용 — 임의 외부 URL이 타인 카드의 photoUrl로 노출되는 것 차단
+        // (추적 픽셀, 재인코딩 파이프라인 우회, javascript: URI 방지)
+        String allowedPrefix = "https://firebasestorage.googleapis.com/v0/b/" + storageBucket + "/o/";
+        if (thumbnailUrl == null || !thumbnailUrl.startsWith(allowedPrefix)) {
+            throw new BusinessException(ErrorCode.PHOTO_INVALID_FORMAT);
+        }
         UserPhoto photo = photoRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROFILE_INCOMPLETE));
         photo.updateThumbnailUrl(thumbnailUrl);

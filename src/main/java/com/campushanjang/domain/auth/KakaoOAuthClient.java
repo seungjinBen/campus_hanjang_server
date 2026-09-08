@@ -58,10 +58,12 @@ public class KakaoOAuthClient {
                 .block();
     }
 
-    public String buildAuthorizationUrl() {
+    public String buildAuthorizationUrl(String state) {
+        // state — 로그인 CSRF 방어. 콜백에서 쿠키의 값과 대조된다 (base64url이라 인코딩 불필요)
         return "https://kauth.kakao.com/oauth/authorize"
                 + "?client_id=" + clientId
                 + "&redirect_uri=" + redirectUri
-                + "&response_type=code";
+                + "&response_type=code"
+                + "&state=" + state;
     }
 }

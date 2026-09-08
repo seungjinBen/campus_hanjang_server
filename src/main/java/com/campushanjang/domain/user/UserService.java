@@ -88,7 +88,7 @@ public class UserService {
             // 공개 여부(isVisible)만 클라이언트가 결정한다
             String traitValue = (dto.getTraitKey() == TraitKey.MAJOR && user.getVerifiedDepartment() != null)
                     ? user.getVerifiedDepartment()
-                    : dto.getTraitValue();
+                    : SANITIZER.sanitize(dto.getTraitValue());
 
             userTraitRepository.findByUserIdAndTraitKey(userId, dto.getTraitKey())
                     .ifPresentOrElse(
@@ -112,13 +112,14 @@ public class UserService {
             if (dto.getTraitValue() == null) {
                 idealTraitRepository.deleteByUserIdAndTraitKey(userId, dto.getTraitKey());
             } else {
+                String idealValue = SANITIZER.sanitize(dto.getTraitValue());
                 idealTraitRepository.findByUserIdAndTraitKey(userId, dto.getTraitKey())
                         .ifPresentOrElse(
-                                ideal -> ideal.update(dto.getTraitValue()),
+                                ideal -> ideal.update(idealValue),
                                 () -> idealTraitRepository.save(IdealTrait.builder()
                                         .user(user)
                                         .traitKey(dto.getTraitKey())
-                                        .traitValue(dto.getTraitValue())
+                                        .traitValue(idealValue)
                                         .build())
                         );
             }
@@ -152,7 +153,7 @@ public class UserService {
         ownerValidator.validateOwner(userId);
         User user = getUser(userId);
         withdrawalBlocklistRepository.save(WithdrawalBlocklist.builder()
-                .kakaoId(user.getKakaoId())
+                .kakaoIdHash(EncryptionUtil.hmacSha256(user.getKakaoId()))
                 .build());
         // 탈퇴 시 프로필 사진 즉시 파기 — DB 행은 CASCADE로 지워지지만 Firebase 파일은 남는다 (개인정보 파기 의무)
         photoService.deleteUserPhotoFromStorage(userId);

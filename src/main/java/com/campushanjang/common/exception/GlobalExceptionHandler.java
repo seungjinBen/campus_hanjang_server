@@ -2,8 +2,10 @@ package com.campushanjang.common.exception;
 
 import com.campushanjang.common.response.ApiResponse;
 import com.campushanjang.common.response.ErrorResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -17,10 +19,10 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
-    @Value("${spring.profiles.active:dev}")
-    private String activeProfile;
+    private final Environment environment;
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException e) {
@@ -71,7 +73,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(Exception e) {
         log.error("Unexpected error occurred error={}", e.getMessage(), e);
-        boolean isProd = "prod".equals(activeProfile);
+        // 문자열 비교는 "prod,metrics"처럼 복수 프로파일이면 판별 실패해 detail이 노출된다
+        boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
         ErrorResponse error = ErrorResponse.builder()
                 .code(ErrorCode.INTERNAL_ERROR.getCode())
                 .message(ErrorCode.INTERNAL_ERROR.getMessage())

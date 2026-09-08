@@ -11,6 +11,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +20,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.Arrays;
+import java.util.Base64;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -27,22 +34,39 @@ public class AuthController {
 
     private final AuthService authService;
 
+    private static final String OAUTH_STATE_COOKIE = "kakao_oauth_state";
+
     @Value("${app.secure-cookie:true}")
     private boolean secureCookie;
 
     @GetMapping("/kakao")
-    public ResponseEntity<Void> kakaoRedirect() {
+    public ResponseEntity<Void> kakaoRedirect(HttpServletResponse response) {
+        // 로그인 CSRF 방어 — state를 쿠키에 심고 카카오 인가 URL에도 실어, 콜백에서 대조한다
+        String state = generateState();
+        ResponseCookie stateCookie = ResponseCookie.from(OAUTH_STATE_COOKIE, state)
+                .httpOnly(true)
+                .secure(secureCookie)
+                .path("/api/auth")
+                .maxAge(Duration.ofMinutes(10))
+                .sameSite("Lax")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, stateCookie.toString());
         return ResponseEntity.status(302)
-                .location(URI.create(authService.getKakaoAuthorizationUrl()))
+                .location(URI.create(authService.getKakaoAuthorizationUrl(state)))
                 .build();
     }
 
     @GetMapping("/kakao/callback")
     public ResponseEntity<ApiResponse<TokenResponseDto>> kakaoCallback(
             @RequestParam String code,
+            @RequestParam(required = false) String state,
             @RequestParam(required = false) String ref,   // 초대 코드 — 프론트가 localStorage에서 첨부
+            HttpServletRequest request,
             HttpServletResponse response
     ) {
+        validateOAuthState(request, state);
+        clearCookie(response, OAUTH_STATE_COOKIE, "/api/auth");
+
         AuthService.KakaoLoginResult result = authService.kakaoLogin(code, ref);
         setRefreshTokenCookie(response, result.refreshToken());
 
@@ -96,27 +120,52 @@ public class AuthController {
             HttpServletResponse response
     ) {
         authService.logout(principal.getId());
-
-        Cookie expiredCookie = new Cookie("refreshToken", "");
-        expiredCookie.setMaxAge(0);
-        expiredCookie.setPath("/");
-        expiredCookie.setHttpOnly(true);
-        response.addCookie(expiredCookie);
-
+        clearCookie(response, "refreshToken", "/");
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
-    // Refresh Token — HttpOnly + Secure(prod only) + SameSite=Strict 쿠키
+    // Refresh Token — HttpOnly + Secure(prod only) + SameSite=Strict 쿠키.
+    // setHeader 방식은 응답에 쿠키가 2개 이상이면 유실되므로 ResponseCookie로 헤더를 개별 추가한다.
     private void setRefreshTokenCookie(HttpServletResponse response, String rawRefreshToken) {
-        Cookie refreshCookie = new Cookie("refreshToken", rawRefreshToken);
-        refreshCookie.setHttpOnly(true);
-        refreshCookie.setSecure(secureCookie); // dev: false (HTTP localhost), prod: true
-        refreshCookie.setPath("/");
-        refreshCookie.setMaxAge(30 * 24 * 60 * 60);
-        response.addCookie(refreshCookie);
-        String existingCookieHeader = response.getHeader("Set-Cookie");
-        if (existingCookieHeader != null) {
-            response.setHeader("Set-Cookie", existingCookieHeader + "; SameSite=Strict");
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", rawRefreshToken)
+                .httpOnly(true)
+                .secure(secureCookie) // dev: false (HTTP localhost), prod: true
+                .path("/")
+                .maxAge(Duration.ofDays(30))
+                .sameSite("Strict")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private void clearCookie(HttpServletResponse response, String name, String path) {
+        ResponseCookie cookie = ResponseCookie.from(name, "")
+                .httpOnly(true)
+                .secure(secureCookie)
+                .path(path)
+                .maxAge(0)
+                .sameSite("Strict")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private String generateState() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private void validateOAuthState(HttpServletRequest request, String state) {
+        String cookieState = request.getCookies() == null ? null
+                : Arrays.stream(request.getCookies())
+                        .filter(c -> OAUTH_STATE_COOKIE.equals(c.getName()))
+                        .findFirst()
+                        .map(Cookie::getValue)
+                        .orElse(null);
+        if (state == null || cookieState == null
+                || !MessageDigest.isEqual(
+                        state.getBytes(StandardCharsets.UTF_8),
+                        cookieState.getBytes(StandardCharsets.UTF_8))) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
     }
 
