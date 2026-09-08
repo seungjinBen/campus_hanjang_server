@@ -19,7 +19,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -155,8 +159,9 @@ public class AuthService {
         UUID userId = UUID.fromString(jwtProvider.getUserId(rawRefreshToken));
 
         // revoked 포함 전체 조회 — 폐기된 토큰 재사용을 탈취 신호로 감지하기 위함
+        String compressedToken = compressForBcrypt(rawRefreshToken);
         RefreshToken matched = authRepository.findByUserId(userId).stream()
-                .filter(t -> passwordEncoder.matches(rawRefreshToken, t.getTokenHash()))
+                .filter(t -> passwordEncoder.matches(compressedToken, t.getTokenHash()))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
 
@@ -193,7 +198,7 @@ public class AuthService {
     }
 
     private void saveRefreshToken(User user, String rawToken) {
-        String tokenHash = passwordEncoder.encode(rawToken);
+        String tokenHash = passwordEncoder.encode(compressForBcrypt(rawToken));
         long expirationMs = jwtProvider.getRefreshExpiration();
         LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(expirationMs / 1000);
 
@@ -203,5 +208,17 @@ public class AuthService {
                 .expiresAt(expiresAt)
                 .build();
         authRepository.save(refreshToken);
+    }
+
+    // bcrypt는 72바이트 제한 — JWT(200바이트 이상)는 SHA-256(base64, 44자)으로 압축 후 해싱한다.
+    // Spring Security 6.5(Boot 3.5)부터 초과 입력이 조용한 절단 대신 예외를 던진다.
+    private String compressForBcrypt(String rawToken) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 미지원", e);
+        }
     }
 }
