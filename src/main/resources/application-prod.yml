@@ -13,3 +13,7 @@ logging:
     com.campushanjang: INFO
   file:
     name: logs/app.log
+
+app:
+  # www(프론트)·api(백엔드) 서브도메인 양쪽에서 refreshToken 쿠키 판독 — Next 미들웨어 리다이렉트 루프 방지
+  cookie-domain: campushanjang.kr

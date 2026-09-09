@@ -39,6 +39,11 @@ public class AuthController {
     @Value("${app.secure-cookie:true}")
     private boolean secureCookie;
 
+    // 쿠키 Domain — prod: campushanjang.kr (www의 Next 미들웨어도 refreshToken을 읽어야 리다이렉트 루프가 없다)
+    // dev: 빈 값 → host-only (localhost는 Domain 지정 시 쿠키가 저장되지 않음)
+    @Value("${app.cookie-domain:}")
+    private String cookieDomain;
+
     @GetMapping("/kakao")
     public ResponseEntity<Void> kakaoRedirect(HttpServletResponse response) {
         // 로그인 CSRF 방어 — state를 쿠키에 심고 카카오 인가 URL에도 실어, 콜백에서 대조한다
@@ -126,25 +131,31 @@ public class AuthController {
     // Refresh Token — HttpOnly + Secure(prod only) + SameSite=Strict 쿠키.
     // setHeader 방식은 응답에 쿠키가 2개 이상이면 유실되므로 ResponseCookie로 헤더를 개별 추가한다.
     private void setRefreshTokenCookie(HttpServletResponse response, String rawRefreshToken) {
-        ResponseCookie cookie = ResponseCookie.from("refreshToken", rawRefreshToken)
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from("refreshToken", rawRefreshToken)
                 .httpOnly(true)
                 .secure(secureCookie) // dev: false (HTTP localhost), prod: true
                 .path("/")
                 .maxAge(Duration.ofDays(30))
-                .sameSite("Strict")
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+                .sameSite("Strict");
+        // www(프론트)와 api(백엔드)가 서브도메인으로 분리 — 상위 도메인 쿠키로 양쪽에서 판독 가능하게
+        if (!cookieDomain.isBlank()) {
+            builder.domain(cookieDomain);
+        }
+        response.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString());
     }
 
     private void clearCookie(HttpServletResponse response, String name, String path) {
-        ResponseCookie cookie = ResponseCookie.from(name, "")
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(name, "")
                 .httpOnly(true)
                 .secure(secureCookie)
                 .path(path)
                 .maxAge(0)
-                .sameSite("Strict")
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+                .sameSite("Strict");
+        // 만료 쿠키도 발급 시와 Domain이 일치해야 실제로 삭제된다
+        if (!cookieDomain.isBlank()) {
+            builder.domain(cookieDomain);
+        }
+        response.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString());
     }
 
     private String generateState() {
