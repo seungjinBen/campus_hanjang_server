@@ -80,5 +80,9 @@ verification:
 admin:
   kakao-id: ${ADMIN_KAKAO_ID:}
 
+# prod 테스트 계정 화이트리스트 (쉼표 구분) — 미설정 시 prod에서 로컬 로그인 전면 차단, dev는 검사 생략
+local-login:
+  allowed-emails: ${LOCAL_LOGIN_ALLOWED_EMAILS:}
+
 cors:
   allowed-origins: https://www.campushanjang.kr

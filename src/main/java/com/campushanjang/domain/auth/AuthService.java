@@ -4,7 +4,7 @@ import com.campushanjang.common.exception.BusinessException;
 import com.campushanjang.common.exception.ErrorCode;
 import com.campushanjang.common.util.EncryptionUtil;
 import com.campushanjang.domain.auth.dto.KakaoUserInfoDto;
-import com.campushanjang.domain.auth.dto.TokenResponseDto;
+import com.campushanjang.domain.auth.dto.LocalLoginRequestDto;
 import com.campushanjang.domain.auth.entity.RefreshToken;
 import com.campushanjang.domain.referral.ReferralEventRepository;
 import com.campushanjang.domain.referral.entity.ReferralEvent;
@@ -15,12 +15,15 @@ import com.campushanjang.domain.user.entity.enums.UserRole;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -41,8 +44,17 @@ public class AuthService {
     private final JwtProvider jwtProvider;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
+    private final Environment environment;
+
     @Value("${admin.kakao-id:}")
     private String adminKakaoId;
+
+    // prod 테스트 계정 화이트리스트 — 미설정 시 로컬 로그인 자체가 비활성 (fail-safe)
+    @Value("${local-login.allowed-emails:}")
+    private String localLoginAllowedEmails;
+
+    @Value("${verification.allowed-university}")
+    private String allowedUniversity;
 
     public String getKakaoAuthorizationUrl(String state) {
         return kakaoOAuthClient.buildAuthorizationUrl(state);
@@ -115,9 +127,12 @@ public class AuthService {
                 });
     }
 
-    // 개발용 로컬 로그인 — 실서비스 전 삭제 예정
+    // 테스트 계정 로그인 — dev는 자유, prod는 LOCAL_LOGIN_ALLOWED_EMAILS 화이트리스트만
     @Transactional
-    public KakaoLoginResult localLogin(String email, String password, String refCode) {
+    public KakaoLoginResult localLogin(LocalLoginRequestDto request) {
+        String email = request.getEmail();
+        validateLocalLoginAllowed(email);
+
         User user = userRepository.findByEmail(email).orElse(null);
         boolean isNewUser = (user == null);
 
@@ -125,13 +140,20 @@ public class AuthService {
             user = userRepository.save(User.builder()
                     .kakaoId("local:" + UUID.randomUUID())
                     .email(email)
-                    .passwordHash(passwordEncoder.encode(password))
+                    .passwordHash(passwordEncoder.encode(request.getPassword()))
                     .build());
-            applyReferral(user, refCode);
-            log.info("로컬 계정 생성 userId={}", user.getId());
+            // 테스트 계정은 LLM 인증 없이 관리자 생성에 준하는 경로로 인증 처리.
+            // birthDate 입력 경로는 applyStudentVerification과 관리자 생성뿐이라는 불변식을 유지한다 (CLAUDE.md §5)
+            if (request.getBirthDate() != null && request.getDepartment() != null
+                    && !request.getDepartment().isBlank()) {
+                user.applyStudentVerification(
+                        allowedUniversity, request.getDepartment().trim(), request.getBirthDate());
+            }
+            applyReferral(user, request.getRefCode());
+            log.info("로컬 계정 생성 userId={} verified={}", user.getId(), user.isStudentVerified());
         } else {
             if (user.getPasswordHash() == null
-                    || !passwordEncoder.matches(password, user.getPasswordHash())) {
+                    || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
                 throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
             }
         }
@@ -148,6 +170,22 @@ public class AuthService {
         saveRefreshToken(user, rawRefreshToken);
 
         return new KakaoLoginResult(accessToken, rawRefreshToken, isNewUser, roleStr);
+    }
+
+    // dev: 화이트리스트 검사 생략 (로컬 개발 편의). prod: 미설정=전면 차단, 미등록 이메일=거부.
+    // 두 경우 모두 동일한 INVALID_CREDENTIALS — 기능 존재 여부를 외부에 노출하지 않는다
+    private void validateLocalLoginAllowed(String email) {
+        if (environment.acceptsProfiles(Profiles.of("dev"))) {
+            return;
+        }
+        boolean permitted = Arrays.stream(localLoginAllowedEmails.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .anyMatch(allowed -> allowed.equalsIgnoreCase(email));
+        if (!permitted) {
+            log.warn("로컬 로그인 화이트리스트 외 시도");
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
     }
 
     @Transactional

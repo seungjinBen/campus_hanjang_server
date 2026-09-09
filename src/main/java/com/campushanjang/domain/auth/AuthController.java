@@ -78,14 +78,13 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(body));
     }
 
-    // 개발용 로컬 로그인 — 실서비스 전 삭제 예정
+    // 테스트 계정 로그인 — dev는 자유, prod는 LOCAL_LOGIN_ALLOWED_EMAILS 화이트리스트만 (미설정 시 비활성)
     @PostMapping("/local/login")
     public ResponseEntity<ApiResponse<TokenResponseDto>> localLogin(
             @RequestBody @Valid LocalLoginRequestDto request,
             HttpServletResponse response
     ) {
-        AuthService.KakaoLoginResult result = authService.localLogin(
-                request.getEmail(), request.getPassword(), request.getRefCode());
+        AuthService.KakaoLoginResult result = authService.localLogin(request);
         setRefreshTokenCookie(response, result.refreshToken());
 
         TokenResponseDto body = TokenResponseDto.builder()
