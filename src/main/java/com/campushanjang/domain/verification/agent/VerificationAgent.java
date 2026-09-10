@@ -234,7 +234,8 @@ public class VerificationAgent {
                                 "required", List.of("student_no"))),
                 Map.of(
                         "name", "search_department",
-                        "description", "기존에 등록된 학과 이름 목록을 조회한다. 판독한 학과가 기존 학과의 표기 변형인지 판단하는 데 사용한다.",
+                        "description", "기존에 등록된 학과 이름 목록을 조회한다. 오직 표기 정규화('컴공과'→'컴퓨터공학과') 용도다. "
+                                + "이 목록은 승인된 유저의 학과가 쌓이는 사전이라 초기엔 거의 비어 있다 — 목록에 없는 학과는 지극히 정상이며 판정에 어떤 영향도 주지 않는다.",
                         "input_schema", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
@@ -284,6 +285,9 @@ public class VerificationAgent {
                 - department를 판독했으면 반드시 search_department로 기존 학과 목록을 조회하라.
                   기존 목록에 같은 과(표기 변형 포함: '컴공과'='컴퓨터공학과')가 있으면 그 정식 명칭으로 department를 정규화하라.
                   없으면 판독한 이름 그대로 둔다.
+                - **중요**: 이 목록은 검증 기준이 아니다. 승인된 유저의 학과가 쌓여가는 사전이라 초기엔 거의 비어 있다.
+                  판독한 학과가 목록에 없는 것은 지극히 정상이며, 그것만으로 NEEDS_REVIEW나 REJECTED 사유가 절대 될 수 없다.
+                  실제 대학의 학과 구성을 네가 아는지 여부와 무관하게, 학과명이 화면에서 명확히 판독되면 그대로 인정하라.
 
                 [판정 규칙]
                 - AUTO_APPROVED: 다섯 항목(대학명·이름·학번·학과·생년월일) 모두 화면에서 확인됨 + 대학명 일치 + 학번 형식 유효 + 학번 미중복 + QR 존재 + 위조 신호 없음
