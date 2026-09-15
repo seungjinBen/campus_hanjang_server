@@ -1,0 +1,88 @@
+spring:
+  profiles:
+    active: dev
+  application:
+    name: campus-hanjang
+  datasource:
+    url: jdbc:postgresql://localhost:5432/campus
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 20000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: 8080
+  shutdown: graceful
+  tomcat:
+    max-http-form-post-size: 12MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      # DB·Firebase 컴포넌트 상세는 비인증 공개 금지 — 로드밸런서는 status(UP/DOWN)만 필요
+      show-details: when_authorized
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-expiration: 900000
+  refresh-expiration: 2592000000
+
+kakao:
+  client-id: ${KAKAO_CLIENT_ID}
+  client-secret: ${KAKAO_CLIENT_SECRET}
+  redirect-uri: ${KAKAO_REDIRECT_URI}
+
+firebase:
+  project-id: campushanjang
+  storage-bucket: campushanjang.firebasestorage.app
+  service-account-key: ${FIREBASE_SERVICE_ACCOUNT_KEY}
+
+encryption:
+  key: ${CONTACT_ENCRYPTION_KEY}
+
+claude:
+  api-key: ${ANTHROPIC_API_KEY}
+  model: claude-haiku-4-5-20251001
+  max-tokens: 2048
+
+verification:
+  # 세종대 학번 형식 — 8자리 숫자 (예: 24011234). 형식 변경 시 여기만 수정
+  student-no-pattern: "^\\d{8}$"
+  allowed-university: 세종대학교
+  # 자동 승인 최소 신뢰도
+  auto-approve-threshold: 0.85
+
+admin:
+  kakao-id: ${ADMIN_KAKAO_ID:}
+
+# prod 테스트 계정 화이트리스트 (쉼표 구분) — 미설정 시 prod에서 로컬 로그인 전면 차단, dev는 검사 생략
+local-login:
+  allowed-emails: ${LOCAL_LOGIN_ALLOWED_EMAILS:}
+
+cors:
+  allowed-origins: https://www.campushanjang.kr

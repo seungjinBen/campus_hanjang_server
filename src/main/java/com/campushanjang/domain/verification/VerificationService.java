@@ -84,10 +84,17 @@ public class VerificationService {
                         .verified(v.getStatus() == VerificationStatus.AUTO_APPROVED
                                 || v.getStatus() == VerificationStatus.APPROVED)
                         .build())
-                .orElseGet(() -> VerificationStatusResponseDto.builder()
-                        .status("NONE")
-                        .verified(false)
-                        .build());
+                .orElseGet(() -> {
+                    // student_verifications 레코드 없이 직접 인증된 계정(테스트 계정)은
+                    // users.is_student_verified를 최종 진실 소스로 사용
+                    boolean verified = userRepository.findById(userId)
+                            .map(User::isStudentVerified)
+                            .orElse(false);
+                    return VerificationStatusResponseDto.builder()
+                            .status(verified ? "AUTO_APPROVED" : "NONE")
+                            .verified(verified)
+                            .build();
+                });
     }
 
     private byte[] readBytes(MultipartFile file) {
