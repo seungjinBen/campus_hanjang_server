@@ -14,13 +14,12 @@ public class FeatureToggleService {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
-    // ── 2026 가을 시즌 — TODO: 기획 확인 필요 — 가을축제 일정 확정 시 실제 오픈/종료일로 변경
-    // 유저 정보 수집 시작일 — 가을 시즌 개발/테스트 시작
+    // ── 2026 가을 시즌 (세종대 축제 연동)
     private static final LocalDate USER_COLLECTION_START = LocalDate.of(2026, 8, 26);
-    // 매칭 기능 오픈일 — 날짜 변경은 코드 수정 + 재배포가 유일한 방법 (클라이언트 조작 불가)
-    private static final LocalDate MATCHING_FEATURE_START = LocalDate.of(2026, 8, 26);
-    // 매칭 서비스 종료 시각 — 가을축제 종료일 확정 전까지 연말로 임시 설정
-    private static final LocalDateTime MATCHING_TERMINATED_AT = LocalDateTime.of(2026, 12, 31, 0, 0, 0);
+    // 매칭 기능 오픈일 — 세종대 가을축제 첫날. 날짜 변경은 코드 수정 + 재배포만 가능 (클라이언트 조작 불가)
+    private static final LocalDate MATCHING_FEATURE_START = LocalDate.of(2026, 9, 28);
+    // 매칭 서비스 종료 시각 — 세종대 가을축제 마지막 날 자정
+    private static final LocalDateTime MATCHING_TERMINATED_AT = LocalDateTime.of(2026, 10, 2, 23, 59, 59);
 
     // 얼리버드 사전등록 기간 — 이 기간 내 학생인증 승인 완료 시 운영기간 내내 하루 선택 +1 (CLAUDE.md 16-5)
     private static final LocalDate EARLY_BIRD_START = LocalDate.of(2026, 9, 21);

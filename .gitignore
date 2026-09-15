@@ -9,6 +9,7 @@ logs/
 .idea/
 *.iml
 out/
+bin/
 .DS_Store
 HELP.md
 k6/results/
