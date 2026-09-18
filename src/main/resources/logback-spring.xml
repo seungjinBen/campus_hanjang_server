@@ -13,6 +13,24 @@
     </springProfile>
 
     <springProfile name="prod">
+        <appender name="SLACK" class="com.github.maricn.logback.SlackAppender">
+            <webhookUri>${SLACK_WEBHOOK_URI}</webhookUri>
+            <layout class="ch.qos.logback.classic.PatternLayout">
+                <pattern>*[ERROR]* %logger{36}%n%msg%n%ex{5}</pattern>
+            </layout>
+            <filter class="ch.qos.logback.classic.filter.LevelFilter">
+                <level>ERROR</level>
+                <onMatch>ACCEPT</onMatch>
+                <onMismatch>DENY</onMismatch>
+            </filter>
+        </appender>
+        <!-- Slack은 비동기로 — 에러 알림이 응답 지연을 유발하지 않도록 -->
+        <appender name="ASYNC_SLACK" class="ch.qos.logback.classic.AsyncAppender">
+            <appender-ref ref="SLACK"/>
+            <queueSize>128</queueSize>
+            <neverBlock>true</neverBlock>
+        </appender>
+
         <appender name="APP_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
             <file>logs/app.log</file>
             <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -41,6 +59,7 @@
         <root level="INFO">
             <appender-ref ref="APP_FILE"/>
             <appender-ref ref="ERROR_FILE"/>
+            <appender-ref ref="ASYNC_SLACK"/>
         </root>
     </springProfile>
 </configuration>
