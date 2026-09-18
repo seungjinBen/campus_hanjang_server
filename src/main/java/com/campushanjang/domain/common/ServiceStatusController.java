@@ -2,6 +2,7 @@ package com.campushanjang.domain.common;
 
 import com.campushanjang.common.feature.FeatureToggleService;
 import com.campushanjang.common.response.ApiResponse;
+import com.campushanjang.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +19,7 @@ public class ServiceStatusController {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final FeatureToggleService featureToggleService;
+    private final UserRepository userRepository;
 
     /**
      * 서비스 오픈 현황 조회 (인증 불필요).
@@ -32,7 +34,8 @@ public class ServiceStatusController {
                 featureToggleService.isMatchingTerminated(),
                 featureToggleService.daysUntilMatchingOpen(),
                 featureToggleService.getMatchingOpenDate().toString(),
-                LocalDate.now(SEOUL).toString()
+                LocalDate.now(SEOUL).toString(),
+                userRepository.countByIsActiveTrue()
         );
         return ResponseEntity.ok(ApiResponse.ok(status));
     }
@@ -43,6 +46,7 @@ public class ServiceStatusController {
             boolean matchingTerminated,
             long daysUntilMatchingOpen,
             String matchingOpenDate,
-            String serverDate
+            String serverDate,
+            long memberCount
     ) {}
 }

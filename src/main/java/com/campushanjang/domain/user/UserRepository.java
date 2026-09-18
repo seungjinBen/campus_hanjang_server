@@ -68,6 +68,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // k6 부하 테스트 전용 — DevAuthController에서만 호출, prod에서는 Bean 자체가 없음
     List<User> findByKakaoIdStartingWithAndIsActiveTrue(String kakaoIdPrefix, Pageable pageable);
 
+    long countByIsActiveTrue();
+
     // 자정 스케줄러에서 일괄 초기화 — DailySelectCountResetScheduler 전용
     @Modifying(clearAutomatically = true)
     @Transactional
