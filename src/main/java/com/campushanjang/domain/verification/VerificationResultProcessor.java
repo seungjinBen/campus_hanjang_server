@@ -13,6 +13,7 @@ import com.campushanjang.domain.user.entity.enums.TraitKey;
 import com.campushanjang.domain.verification.agent.AgentDecision;
 import com.campushanjang.domain.verification.entity.Department;
 import com.campushanjang.domain.verification.entity.StudentVerification;
+import com.campushanjang.domain.verification.entity.enums.VerificationMethod;
 import com.campushanjang.domain.verification.entity.enums.VerificationStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,13 +41,14 @@ public class VerificationResultProcessor {
     private final ReferralEventRepository referralEventRepository;
 
     @Transactional
-    public StudentVerification persist(UUID userId, AgentDecision decision, String imageHash) {
+    public StudentVerification persist(UUID userId, AgentDecision decision, String imageHash, VerificationMethod method) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
 
         StudentVerification verification = StudentVerification.builder()
                 .user(user)
                 .status(decision.status())
+                .verificationMethod(method)
                 .extractedUniversity(decision.university())
                 .extractedName(decision.name())
                 .extractedStudentNo(decision.studentNo())
@@ -106,6 +108,14 @@ public class VerificationResultProcessor {
                                 .traitValue(dept)
                                 .isVisible(true)
                                 .build()));
+    }
+
+    // 에브리타임 경로 전용 — 승인 후 화면에 없던 학과·생년월일을 1회 보충 입력 (재호출 방지는 VerificationService의 birthDate IS NULL 가드)
+    @Transactional
+    public void applySupplementaryInfo(User user, String department, LocalDate birthDate) {
+        user.applySupplementaryVerificationInfo(department, birthDate);
+        registerDepartmentIfNew(department);
+        upsertMajorTrait(user, department);
     }
 
     // 학과 동적 사전 — 승인 확정 시에만 신규 등록 (검수 대기 건이 사전을 오염시키지 않도록)

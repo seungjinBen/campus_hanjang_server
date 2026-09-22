@@ -6,8 +6,10 @@ import com.campushanjang.domain.user.UserRepository;
 import com.campushanjang.domain.user.entity.User;
 import com.campushanjang.domain.verification.agent.AgentDecision;
 import com.campushanjang.domain.verification.agent.VerificationAgent;
+import com.campushanjang.domain.verification.dto.SupplementaryInfoRequestDto;
 import com.campushanjang.domain.verification.dto.VerificationStatusResponseDto;
 import com.campushanjang.domain.verification.dto.VerificationSubmitResponseDto;
+import com.campushanjang.domain.verification.entity.enums.VerificationMethod;
 import com.campushanjang.domain.verification.entity.enums.VerificationStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,8 +37,8 @@ public class VerificationService {
 
     // 의도적으로 @Transactional 없음 — LLM 호출(최대 60초)이 DB 커넥션을 점유하지 않도록
     // 조회는 개별 쿼리, 저장은 VerificationResultProcessor의 트랜잭션으로 분리
-    public VerificationSubmitResponseDto submit(UUID userId, MultipartFile file) {
-        log.info("학생인증 제출 userId={} size={} contentType={}", userId, file.getSize(), file.getContentType());
+    public VerificationSubmitResponseDto submit(UUID userId, MultipartFile file, VerificationMethod method) {
+        log.info("학생인증 제출 userId={} size={} contentType={} method={}", userId, file.getSize(), file.getContentType(), method);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
@@ -53,10 +55,10 @@ public class VerificationService {
             throw new BusinessException(ErrorCode.VERIFICATION_DUPLICATE_IMAGE);
         }
 
-        AgentDecision decision = verificationAgent.verify(bytes, mediaType);
+        AgentDecision decision = verificationAgent.verify(bytes, mediaType, method);
 
         try {
-            resultProcessor.persist(userId, decision, imageHash);
+            resultProcessor.persist(userId, decision, imageHash, method);
         } catch (DataIntegrityViolationException e) {
             // 승인 학번 부분 유니크 인덱스 최종 방어 — 동시 요청으로 같은 학번이 먼저 승인된 경우
             log.warn("학번 유니크 충돌 userId={}", userId);
@@ -73,28 +75,48 @@ public class VerificationService {
                 .message(decision.userMessage())
                 .university(approved ? decision.university() : null)
                 .department(approved ? decision.department() : null)
+                // 에브리타임 경로는 승인돼도 생년월일이 항상 null — 보충 입력 화면으로 안내
+                .needsSupplementaryInfo(approved && decision.birthDate() == null)
                 .build();
     }
 
     @Transactional(readOnly = true)
     public VerificationStatusResponseDto getStatus(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
         return verificationRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
-                .map(v -> VerificationStatusResponseDto.builder()
-                        .status(v.getStatus().name())
-                        .verified(v.getStatus() == VerificationStatus.AUTO_APPROVED
-                                || v.getStatus() == VerificationStatus.APPROVED)
-                        .build())
-                .orElseGet(() -> {
-                    // student_verifications 레코드 없이 직접 인증된 계정(테스트 계정)은
-                    // users.is_student_verified를 최종 진실 소스로 사용
-                    boolean verified = userRepository.findById(userId)
-                            .map(User::isStudentVerified)
-                            .orElse(false);
-                    return VerificationStatusResponseDto.builder()
-                            .status(verified ? "AUTO_APPROVED" : "NONE")
-                            .verified(verified)
-                            .build();
-                });
+                .map(v -> buildStatus(v.getStatus().name(),
+                        v.getStatus() == VerificationStatus.AUTO_APPROVED || v.getStatus() == VerificationStatus.APPROVED,
+                        user))
+                // student_verifications 레코드 없이 직접 인증된 계정(테스트 계정)은
+                // users.is_student_verified를 최종 진실 소스로 사용
+                .orElseGet(() -> buildStatus(
+                        user.isStudentVerified() ? "AUTO_APPROVED" : "NONE",
+                        user.isStudentVerified(),
+                        user));
+    }
+
+    private VerificationStatusResponseDto buildStatus(String status, boolean verified, User user) {
+        return VerificationStatusResponseDto.builder()
+                .status(status)
+                .verified(verified)
+                .needsSupplementaryInfo(verified && user.getBirthDate() == null)
+                .build();
+    }
+
+    // 에브리타임 경로 승인 후 학과·생년월일 보충 입력 — birthDate IS NULL 가드가 유일한 재호출 방지 수단 (CLAUDE.md 5)
+    public void submitSupplementaryInfo(UUID userId, SupplementaryInfoRequestDto dto) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        if (!user.isStudentVerified()) {
+            throw new BusinessException(ErrorCode.STUDENT_VERIFICATION_REQUIRED);
+        }
+        if (user.getBirthDate() != null) {
+            throw new BusinessException(ErrorCode.VERIFICATION_SUPPLEMENTARY_ALREADY_SUBMITTED);
+        }
+        resultProcessor.applySupplementaryInfo(user, dto.getDepartment(), dto.getBirthDate());
+        log.info("보충 정보 제출 완료 userId={}", userId);
     }
 
     private byte[] readBytes(MultipartFile file) {

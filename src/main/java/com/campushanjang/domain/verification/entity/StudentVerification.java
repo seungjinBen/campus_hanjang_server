@@ -1,6 +1,7 @@
 package com.campushanjang.domain.verification.entity;
 
 import com.campushanjang.domain.user.entity.User;
+import com.campushanjang.domain.verification.entity.enums.VerificationMethod;
 import com.campushanjang.domain.verification.entity.enums.VerificationStatus;
 import jakarta.persistence.*;
 import lombok.Builder;
@@ -31,6 +32,11 @@ public class StudentVerification {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private VerificationStatus status;
+
+    // 인증 진입 경로 — 프롬프트/게이트 분기 및 통계용 (2026 가을: 에브리타임 경로 추가)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "verification_method", nullable = false, length = 20)
+    private VerificationMethod verificationMethod;
 
     @Column(name = "extracted_university", length = 100)
     private String extractedUniversity;
@@ -78,7 +84,7 @@ public class StudentVerification {
     private LocalDateTime createdAt;
 
     @Builder
-    public StudentVerification(User user, VerificationStatus status,
+    public StudentVerification(User user, VerificationStatus status, VerificationMethod verificationMethod,
                                String extractedUniversity, String extractedName,
                                String extractedStudentNo, String extractedDepartment,
                                LocalDate extractedBirthDate,
@@ -87,6 +93,7 @@ public class StudentVerification {
                                Integer processingMs, Integer llmCalls) {
         this.user = user;
         this.status = status;
+        this.verificationMethod = verificationMethod;
         this.extractedUniversity = extractedUniversity;
         this.extractedName = extractedName;
         this.extractedStudentNo = extractedStudentNo;

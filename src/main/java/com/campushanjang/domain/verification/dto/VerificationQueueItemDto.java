@@ -15,6 +15,7 @@ public class VerificationQueueItemDto {
     private final UUID verificationId;
     private final UUID userId;
     private final String nickname;
+    private final String verificationMethod;
     private final String extractedUniversity;
     private final String extractedName;
     private final String extractedStudentNo;

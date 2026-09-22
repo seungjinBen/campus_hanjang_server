@@ -33,6 +33,7 @@ public class VerificationAdminService {
                         .verificationId(v.getId())
                         .userId(v.getUser().getId())
                         .nickname(v.getUser().getNickname())
+                        .verificationMethod(v.getVerificationMethod().name())
                         .extractedUniversity(v.getExtractedUniversity())
                         .extractedName(v.getExtractedName())
                         .extractedStudentNo(v.getExtractedStudentNo())

@@ -83,6 +83,8 @@ public class RateLimitConfig {
             // LLM 비용 방어 — 시간당 5회면 정상 재시도(재촬영 2~3회)는 커버
             case "verification:submit" -> Bandwidth.classic(5, Refill.greedy(5, Duration.ofHours(1)));
             case "verification:status" -> Bandwidth.classic(30, Refill.greedy(30, Duration.ofMinutes(1)));
+            // LLM 호출 없는 가벼운 요청이지만 학과 사전 오염 방지를 위해 여유롭게 제한
+            case "verification:supplementary-info" -> Bandwidth.classic(10, Refill.greedy(10, Duration.ofHours(1)));
             // 분당 제한 — 자동화 스크립트로 정보 탈취 시도 차단 (dev에서는 완화 가능)
             case "match:cards:read" -> Bandwidth.classic(userCardsPerMinute, Refill.greedy(userCardsPerMinute, Duration.ofMinutes(1)));
             case "match:received" -> Bandwidth.classic(userReceivedPerMinute, Refill.greedy(userReceivedPerMinute, Duration.ofMinutes(1)));

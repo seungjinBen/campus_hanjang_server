@@ -153,6 +153,13 @@ public class User {
         }
     }
 
+    // 에브리타임 인증 경로 전용 — 화면에 없는 학과·생년월일을 승인 후 1회만 보충 입력.
+    // 재호출 방지는 서비스 계층의 birthDate IS NULL 가드가 담당 (CLAUDE.md 5)
+    public void applySupplementaryVerificationInfo(String department, LocalDate birthDate) {
+        this.verifiedDepartment = department;
+        this.birthDate = birthDate;
+    }
+
     public void updateDeptFilterMode(DeptFilterMode mode) {
         this.deptFilterMode = mode;
     }
