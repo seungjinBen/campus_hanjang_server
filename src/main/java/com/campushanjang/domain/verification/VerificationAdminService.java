@@ -3,6 +3,7 @@ package com.campushanjang.domain.verification;
 import com.campushanjang.common.exception.BusinessException;
 import com.campushanjang.common.exception.ErrorCode;
 import com.campushanjang.domain.user.entity.User;
+import com.campushanjang.domain.verification.dto.RejectedVerificationDto;
 import com.campushanjang.domain.verification.dto.VerificationQueueItemDto;
 import com.campushanjang.domain.verification.dto.VerificationStatsDto;
 import com.campushanjang.domain.verification.entity.StudentVerification;
@@ -46,8 +47,29 @@ public class VerificationAdminService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<RejectedVerificationDto> getRejectedList() {
+        return verificationRepository.findRejectedByStatus(VerificationStatus.REJECTED).stream()
+                .map(v -> RejectedVerificationDto.builder()
+                        .verificationId(v.getId())
+                        .userId(v.getUser().getId())
+                        .nickname(v.getUser().getNickname())
+                        .verificationMethod(v.getVerificationMethod().name())
+                        .extractedUniversity(v.getExtractedUniversity())
+                        .extractedStudentNo(v.getExtractedStudentNo())
+                        .extractedName(v.getExtractedName())
+                        .confidenceScore(v.getConfidenceScore())
+                        .decisionReason(v.getDecisionReason())
+                        .adminRejectionNote(v.getAdminRejectionNote())
+                        .rejectedBy(v.getReviewedBy() != null ? "ADMIN" : "AI")
+                        .rejectedAt(v.getReviewedAt() != null ? v.getReviewedAt() : v.getCreatedAt())
+                        .createdAt(v.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
     @Transactional
-    public void review(UUID adminId, UUID verificationId, String action) {
+    public void review(UUID adminId, UUID verificationId, String action, String rejectionNote) {
         StudentVerification verification = verificationRepository.findById(verificationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.VERIFICATION_NOT_FOUND));
 
@@ -72,7 +94,7 @@ public class VerificationAdminService {
             }
             log.info("검수 승인 verificationId={} adminId={}", verificationId, adminId);
         } else {
-            verification.rejectByReviewer(adminId);
+            verification.rejectByReviewer(adminId, rejectionNote);
             log.info("검수 거절 verificationId={} adminId={}", verificationId, adminId);
         }
     }

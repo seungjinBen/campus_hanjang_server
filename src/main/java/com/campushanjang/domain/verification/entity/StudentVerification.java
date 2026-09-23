@@ -80,6 +80,10 @@ public class StudentVerification {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
+    // 관리자가 직접 거절할 때 입력한 사유 — AI 자동거절 건은 null (decisionReason 참조)
+    @Column(name = "admin_rejection_note", length = 500)
+    private String adminRejectionNote;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -115,9 +119,10 @@ public class StudentVerification {
         this.reviewedAt = LocalDateTime.now();
     }
 
-    public void rejectByReviewer(UUID reviewerId) {
+    public void rejectByReviewer(UUID reviewerId, String rejectionNote) {
         this.status = VerificationStatus.REJECTED;
         this.reviewedBy = reviewerId;
         this.reviewedAt = LocalDateTime.now();
+        this.adminRejectionNote = rejectionNote;
     }
 }

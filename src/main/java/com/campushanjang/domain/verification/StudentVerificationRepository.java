@@ -26,6 +26,10 @@ public interface StudentVerificationRepository extends JpaRepository<StudentVeri
     @Query("SELECT sv FROM StudentVerification sv JOIN FETCH sv.user WHERE sv.status = :status ORDER BY sv.createdAt ASC")
     List<StudentVerification> findQueueByStatus(@Param("status") VerificationStatus status);
 
+    // 거절 내역 — 최신순, 관리자 거절 사유 확인용
+    @Query("SELECT sv FROM StudentVerification sv JOIN FETCH sv.user WHERE sv.status = :status ORDER BY sv.createdAt DESC")
+    List<StudentVerification> findRejectedByStatus(@Param("status") VerificationStatus status);
+
     // ── 메트릭 (자소서 지표: 자동승인율 / 평균 처리시간 / LLM 비용) ──
 
     long countByStatus(VerificationStatus status);

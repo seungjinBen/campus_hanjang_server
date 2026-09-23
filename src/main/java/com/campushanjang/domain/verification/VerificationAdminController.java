@@ -1,6 +1,7 @@
 package com.campushanjang.domain.verification;
 
 import com.campushanjang.common.response.ApiResponse;
+import com.campushanjang.domain.verification.dto.RejectedVerificationDto;
 import com.campushanjang.domain.verification.dto.VerificationQueueItemDto;
 import com.campushanjang.domain.verification.dto.VerificationReviewRequestDto;
 import com.campushanjang.domain.verification.dto.VerificationStatsDto;
@@ -27,13 +28,18 @@ public class VerificationAdminController {
         return ResponseEntity.ok(ApiResponse.ok(verificationAdminService.getReviewQueue()));
     }
 
+    @GetMapping("/rejected")
+    public ResponseEntity<ApiResponse<List<RejectedVerificationDto>>> getRejected() {
+        return ResponseEntity.ok(ApiResponse.ok(verificationAdminService.getRejectedList()));
+    }
+
     @PostMapping("/{verificationId}/review")
     public ResponseEntity<ApiResponse<Void>> review(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID verificationId,
             @Valid @RequestBody VerificationReviewRequestDto request
     ) {
-        verificationAdminService.review(principal.getId(), verificationId, request.getAction());
+        verificationAdminService.review(principal.getId(), verificationId, request.getAction(), request.getRejectionNote());
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
