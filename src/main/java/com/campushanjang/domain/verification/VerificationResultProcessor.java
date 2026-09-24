@@ -55,7 +55,7 @@ public class VerificationResultProcessor {
                 .extractedDepartment(decision.department())
                 .extractedBirthDate(decision.birthDate())
                 .confidenceScore(decision.confidence())
-                .decisionReason(truncate(decision.reason(), 500))
+                .decisionReason(blankToNull(decision.reason(), 500))
                 .agentActions(decision.actionsJson())
                 .imageHash(imageHash)
                 .processingMs((int) decision.processingMs())
@@ -127,8 +127,8 @@ public class VerificationResultProcessor {
         }
     }
 
-    private String truncate(String value, int max) {
-        if (value == null) return null;
+    private String blankToNull(String value, int max) {
+        if (value == null || value.isBlank()) return null;
         return value.length() <= max ? value : value.substring(0, max);
     }
 }

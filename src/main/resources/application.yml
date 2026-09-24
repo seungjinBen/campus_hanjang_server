@@ -73,6 +73,8 @@ claude:
 verification:
   # 세종대 학번 형식 — 8자리 숫자 (예: 24011234). 형식 변경 시 여기만 수정
   student-no-pattern: "^\\d{8}$"
+  # 에브리타임 입학년도 형식 — "20학번", "21학번" 등 2자리 연도 + "학번"
+  entry-year-pattern: "^\\d{2}학번$"
   allowed-university: 세종대학교
   # 자동 승인 최소 신뢰도
   auto-approve-threshold: 0.85
