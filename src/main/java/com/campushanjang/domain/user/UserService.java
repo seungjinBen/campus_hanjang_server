@@ -157,7 +157,7 @@ public class UserService {
                 .build());
         // 탈퇴 시 프로필 사진 즉시 파기 — DB 행은 CASCADE로 지워지지만 Firebase 파일은 남는다 (개인정보 파기 의무)
         photoService.deleteUserPhotoFromStorage(userId);
-        userRepository.delete(user);
+        userRepository.deleteUserById(userId);
         log.info("계정 삭제 userId={}", userId);
     }
 

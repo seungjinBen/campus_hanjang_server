@@ -75,4 +75,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Transactional
     @Query("UPDATE User u SET u.dailySelectCount = 0 WHERE u.isActive = true")
     void resetAllDailySelectCounts();
+
+    // Hibernate cascade(CascadeType.ALL)를 우회하여 직접 삭제 — DB의 ON DELETE CASCADE가 연관 테이블을 처리한다.
+    // delete(entity) 는 lazy 컬렉션 초기화 → 개별 child DELETE → parent DELETE 순서로 실행해
+    // flush 타이밍 문제를 일으킬 수 있어 탈퇴 500 오류가 재현됐다 (2026-09)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM User u WHERE u.id = :id")
+    void deleteUserById(@Param("id") UUID id);
 }
