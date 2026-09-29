@@ -20,6 +20,8 @@ public class FeatureToggleService {
     private static final LocalDate MATCHING_FEATURE_START = LocalDate.of(2026, 9, 28);
     // 매칭 서비스 종료 시각 — 세종대 가을축제 마지막 날 자정
     private static final LocalDateTime MATCHING_TERMINATED_AT = LocalDateTime.of(2026, 10, 2, 23, 59, 59);
+    // 마지막 날 — 카드 20장 특별 제공 (유저 요청 반영, 2026-09-30 확정)
+    private static final LocalDate MATCHING_FINAL_DAY = LocalDate.of(2026, 10, 2);
 
     // 얼리버드 사전등록 기간 — 이 기간 내 학생인증 승인 완료 시 운영기간 내내 하루 선택 +1 (CLAUDE.md 16-5)
     private static final LocalDate EARLY_BIRD_START = LocalDate.of(2026, 9, 21);
@@ -56,5 +58,9 @@ public class FeatureToggleService {
 
     public LocalDate getMatchingOpenDate() {
         return MATCHING_FEATURE_START;
+    }
+
+    public boolean isFinalDay() {
+        return LocalDate.now(SEOUL).equals(MATCHING_FINAL_DAY);
     }
 }

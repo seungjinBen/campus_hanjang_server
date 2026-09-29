@@ -2,6 +2,7 @@ package com.campushanjang.domain.match;
 
 import com.campushanjang.common.exception.BusinessException;
 import com.campushanjang.common.exception.ErrorCode;
+import com.campushanjang.common.feature.FeatureToggleService;
 import com.campushanjang.common.util.EncryptionUtil;
 import com.campushanjang.common.util.MatchScoreUtil;
 import com.campushanjang.domain.match.dto.*;
@@ -44,11 +45,13 @@ public class MatchService {
     private final IdealTraitRepository idealTraitRepository;
     private final PhotoRepository photoRepository;
     private final ReferralEventRepository referralEventRepository;
+    private final FeatureToggleService featureToggleService;
 
     private static final PolicyFactory SANITIZER = Sanitizers.FORMATTING;
 
-    // 남녀 모두 하루 10장 — 카드 희소성 규칙
+    // 남녀 모두 하루 10장 — 마지막 날(10/2)은 20장 특별 제공
     private static final int DAILY_CARD_LIMIT = 10;
+    private static final int DAILY_CARD_LIMIT_FINAL_DAY = 20;
     // 하루 기본 선택 횟수 — 얼리버드(+1)·리퍼럴 보너스(+1)로 최대 4회 (CLAUDE.md 16-5, 2026 가을 개정)
     private static final int BASE_DAILY_SELECT_LIMIT = 2;
     // 일치율 75% 기준 — 연락처 즉시 공개 vs 쪽지 분기 임계값
@@ -354,7 +357,8 @@ public class MatchService {
 
         // 오늘 이미 생성된 카드 수 확인 — 부족한 만큼만 추가
         int existingCount = dailyCardRepository.countByUserIdAndDate(user.getId(), date);
-        int needed = DAILY_CARD_LIMIT - existingCount;
+        int cardLimit = featureToggleService.isFinalDay() ? DAILY_CARD_LIMIT_FINAL_DAY : DAILY_CARD_LIMIT;
+        int needed = cardLimit - existingCount;
         if (needed <= 0) {
             return List.of();
         }
