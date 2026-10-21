@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -18,16 +19,27 @@ import java.util.Map;
 @Component
 public class ClaudeApiClient {
 
+    // 한 번의 시도에 허용하는 최대 응답 대기 — 이미지 포함 vision 요청은 보통 3~10초
+    private static final Duration PER_ATTEMPT_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
+
     private final WebClient webClient;
     private final String model;
     private final int maxTokens;
+    private final int maxRetries;
+    private final Duration initialBackoff;
 
     public ClaudeApiClient(
+            WebClient.Builder webClientBuilder,
             @Value("${claude.api-key}") String apiKey,
             @Value("${claude.model:claude-haiku-4-5-20251001}") String model,
-            @Value("${claude.max-tokens:2048}") int maxTokens
+            @Value("${claude.max-tokens:2048}") int maxTokens,
+            @Value("${claude.retry.max-retries:3}") int maxRetries,
+            @Value("${claude.retry.initial-backoff-ms:1000}") long initialBackoffMs
     ) {
-        this.webClient = WebClient.builder()
+        this.maxRetries = maxRetries;
+        this.initialBackoff = Duration.ofMillis(initialBackoffMs);
+        this.webClient = webClientBuilder
                 .baseUrl("https://api.anthropic.com/v1")
                 .defaultHeader("x-api-key", apiKey)
                 .defaultHeader("anthropic-version", "2023-06-01")
@@ -55,15 +67,36 @@ public class ClaudeApiClient {
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(JsonNode.class)
-                    .block(Duration.ofSeconds(60));
-        } catch (WebClientResponseException e) {
-            // 응답 body에 사용자 이미지 정보가 없으므로 상태코드와 에러 본문만 로그
-            log.error("Claude API 오류 status={} body={}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new IllegalStateException("Claude API 호출 실패", e);
+                    .timeout(PER_ATTEMPT_TIMEOUT)
+                    // 429(rate limit)·5xx(529 overloaded 포함)만 지수 백오프 재시도.
+                    // 4xx 요청 오류·타임아웃은 재시도해도 결과가 같거나 비용만 늘어 제외.
+                    // 일시 장애가 곧바로 NEEDS_REVIEW 검수 큐로 떨어지는 것을 막는 목적.
+                    .retryWhen(Retry.backoff(maxRetries, initialBackoff)
+                            .maxBackoff(MAX_BACKOFF)
+                            .filter(ClaudeApiClient::isRetryable)
+                            .doBeforeRetry(signal -> log.warn("Claude API 재시도 attempt={}/{} status={}",
+                                    signal.totalRetries() + 1, maxRetries, statusOf(signal.failure()))))
+                    .block();
         } catch (Exception e) {
-            log.error("Claude API 호출 실패 model={} error={}", model, e.getMessage());
-            throw new IllegalStateException("Claude API 호출 실패", e);
+            // 재시도 소진 시 reactor가 원인 예외를 cause로 감싸므로 풀어서 상태코드를 기록
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof WebClientResponseException w) {
+                // 응답 body에 사용자 이미지 정보가 없으므로 상태코드와 에러 본문만 로그
+                log.error("Claude API 오류 status={} body={}", w.getStatusCode(), w.getResponseBodyAsString());
+            } else {
+                log.error("Claude API 호출 실패 model={} error={}", model, cause.getMessage());
+            }
+            throw new IllegalStateException("Claude API 호출 실패", cause);
         }
+    }
+
+    static boolean isRetryable(Throwable t) {
+        return t instanceof WebClientResponseException w
+                && (w.getStatusCode().value() == 429 || w.getStatusCode().is5xxServerError());
+    }
+
+    private static String statusOf(Throwable t) {
+        return t instanceof WebClientResponseException w ? String.valueOf(w.getStatusCode().value()) : t.getClass().getSimpleName();
     }
 
     // ── 메시지/콘텐츠 블록 빌더 헬퍼 ──

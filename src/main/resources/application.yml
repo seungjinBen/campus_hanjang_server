@@ -69,6 +69,10 @@ claude:
   api-key: ${ANTHROPIC_API_KEY}
   model: claude-haiku-4-5-20251001
   max-tokens: 2048
+  retry:
+    # 429·5xx(529 overloaded 포함)만 지수 백오프 재시도 — 첫 시도 제외 횟수
+    max-retries: 3
+    initial-backoff-ms: 1000
 
 verification:
   # 세종대 학번 형식 — 8자리 숫자 (예: 24011234). 형식 변경 시 여기만 수정
