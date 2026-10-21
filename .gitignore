@@ -14,3 +14,7 @@ bin/
 HELP.md
 k6/results/
 *.json
+
+# JVM 크래시 덤프
+hs_err_pid*.log
+replay_pid*.log
