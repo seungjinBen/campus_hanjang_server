@@ -18,3 +18,11 @@ k6/results/
 # JVM 크래시 덤프
 hs_err_pid*.log
 replay_pid*.log
+
+# Python (분석 환경)
+.venv*/
+__pycache__/
+*.pyc
+
+# 분석 raw 데이터 (민감 정보 포함 가능 — 집계 PNG만 output/에 커밋)
+analysis/data/
