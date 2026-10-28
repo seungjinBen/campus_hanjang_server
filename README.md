@@ -38,7 +38,7 @@
 
 ```
 카카오 로그인 → 학생인증(QR 캡처 AI 판정) → 프로필 작성 → 사진 등록 → 특징 입력 → 이상형 설정
-→ 매일 자정: 새 카드 10장 제공 → 하루 최대 4회 선택 → 이상형 75% 이상 시 연락처 즉시 공개
+→ 매일 자정: 새 카드 10장 제공 → 하루 기본 2회 선택(보너스 포함 최대 4회) → 이상형 75% 이상 시 연락처 즉시 공개
 ```
 
 ---
@@ -106,8 +106,8 @@ graph TB
         FE["Next.js 14\nApp Router"]
     end
 
-    subgraph Server["서버 (EC2)"]
-        Nginx["Nginx\n역방향 프록시 + HTTPS 종단"]
+    subgraph Server["서버 (Oracle Cloud Ubuntu ARM VM)"]
+        Caddy["Caddy\n리버스 프록시 + 자동 HTTPS(Let's Encrypt)"]
         BE["Spring Boot 3.x\nREST API"]
         Scheduler["Spring Scheduler\n자정 카드 갱신\n선택 횟수 초기화"]
     end
@@ -122,8 +122,8 @@ graph TB
         Claude["Claude Haiku 4.5\nAI 학생인증"]
     end
 
-    FE -->|"HTTPS /api/*"| Nginx
-    Nginx --> BE
+    FE -->|"HTTPS /api/*"| Caddy
+    Caddy -->|"localhost:8080"| BE
     BE <-->|"JDBC / HikariCP"| PG
     BE -->|"Firebase Admin SDK"| FB
     FB -->|"CDN URL"| FE
@@ -215,13 +215,13 @@ iPhone 15 Pro(HEIF), iPhone SE(HEIC), Live Photo(MOV 첫 프레임) 세 케이�
 ### 3. 동시 선택 요청으로 하루 제한 초과
 
 **문제**
-부하 테스트 중 동일 유저가 0.1초 간격으로 선택 요청 2건을 동시에 보내면, `daily_select_count`가 최대치(3)임에도 두 요청이 모두 통과해 4번째 선택까지 성공했습니다.
+부하 테스트 중 동일 유저가 0.1초 간격으로 선택 요청 2건을 동시에 보내면, `daily_select_count`가 이미 하루 한도(기본 2회, 얼리버드·리퍼럴 보너스 포함 최대 4회)에 도달했음에도 두 요청이 모두 통과해 한도를 넘는 선택이 성공했습니다.
 
 **원인 특정**
 `MatchService.select()` 내부에서 `user.getDailySelectCount()`를 읽은 뒤 `user.incrementSelectCount()`를 호출하기까지의 간격에, 두 번째 트랜잭션이 아직 갱신 전인 값을 읽어 두 요청 모두 "한도 미만"으로 판단했습니다. JPA 낙관적 락(`@Version`)도 고려했지만, 버전 충돌 예외 발생 후 재시도 로직까지 구현해야 하는 복잡성이 있었습니다.
 
 **해결 방법 선택 이유**
-`entityManager.lock(user, LockModeType.PESSIMISTIC_WRITE)`로 유저 행에 SELECT FOR UPDATE를 적용했습니다. 선택 횟수 갱신은 하루 최대 4회로 극히 드문 연산이기 때문에, 비관적 락으로 인한 처리량 저하가 사실상 없는 반면 동시성 버그를 코드 변경 없이 완전 차단할 수 있었습니다. 온디맨드 카드 생성 시 중복 생성을 막는 로직에도 동일 방식을 적용했습니다.
+`UserRepository.findByIdForUpdate()`에 `@Lock(LockModeType.PESSIMISTIC_WRITE)`와 JPQL(`SELECT u FROM User u WHERE u.id = :id`)을 붙여 유저 행에 SELECT FOR UPDATE를 걸고, `select()` 첫 줄의 유저 조회만 이 메서드로 교체했습니다. 선택 횟수 갱신은 하루 기본 2회(보너스 포함 최대 4회)로 극히 드문 연산이기 때문에, 비관적 락으로 인한 처리량 저하가 사실상 없는 반면 서비스 로직은 그대로 두고 동시성 버그를 차단할 수 있었습니다. 온디맨드 카드 생성(`getTodayCards()`)의 중복 생성 방지에도 같은 메서드를 사용합니다.
 
 **결과**
 동시 선택 100회 반복 테스트에서 하루 제한 초과 0건. 재선택(같은 후보를 다시 선택)은 멱등 처리로 횟수 차감 없이 기존 결과 반환.

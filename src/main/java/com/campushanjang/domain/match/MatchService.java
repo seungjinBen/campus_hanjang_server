@@ -139,7 +139,7 @@ public class MatchService {
 
     private SelectResponseDto buildSelectResponse(SelectionType type, User selected) {
         if (type == SelectionType.CONTACT_REVEALED) {
-            // 연락처 복호화 — 70% 이상 일치 시에만 허용
+            // 연락처 복호화 — CONTACT_REVEAL_THRESHOLD(75%) 이상 일치 시에만 허용
             String contactValue = selected.getContactValueEncrypted() != null
                     ? EncryptionUtil.decrypt(selected.getContactValueEncrypted()) : null;
             return SelectResponseDto.builder()
